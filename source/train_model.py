@@ -31,6 +31,8 @@ parser.add_argument('--log-interval', type=int, default=10, metavar='N',
                     help='how many batches to wait before logging training status')
 parser.add_argument('--weight_decay', type=float, default=1e-04, metavar='W',
                     help='weigth_decay rate')
+parser.add_argument('--attack', action='store_true', default=False, metavar='A',
+                    help='attack after training?')
 args = parser.parse_args()
 args.cuda = not args.no_cuda and torch.cuda.is_available()
 
@@ -48,7 +50,8 @@ kwargs = {'num_workers' : 1 , 'pin_memory': True} if args.cuda else {}
 
 
 if __name__=="__main__":
-    model = Net(args,kwargs,model=args.model)
+    model = Net(args,kwargs)
+
     if args.cuda:
         model.cuda()
 
