@@ -35,7 +35,7 @@ class Attack(Net):
         #TODO
         generate_samples(self.model)
         #Load Generated samples
-        with open(".adv_examples/"+self.model+"_samples.pkl", "rb") as f:
+        with open("../utils/adv_examples/"+self.model+"_samples.pkl", "rb") as f:
             samples_5k = pickle.load(f)
         xs = samples_5k["images"]
         y_trues = samples_5k["labels"]
@@ -48,24 +48,24 @@ class Attack(Net):
         for x, y_true in tqdm(zip(xs, y_trues)):
 
             #make x as Variable
-            x = Variable(torch.FloatTensor(x.reshape(1,784)), requires_grad=True) if self.model=="FFN" else Variable(torch.FloatTensor(x), requires_grad=True)
+            x = Variable(torch.FloatTensor(x.reshape(1,784)), requires_grad=True) if self.model=="FFN" else Variable(torch.FloatTensor(x).unsqueeze(0), requires_grad=True)
             y_true = Variable(torch.LongTensor(np.array([y_true])), requires_grad=False)
 
             #Classify x before Adv_attack
-            y_pred = np.argmax(super(Attack,self)(x).data.numpy())
+            y_pred = np.argmax(self(x).data.numpy())
 
             #Generate Adv Image
-            outputs = super(Attack,self)(x)
+            outputs = self(x)
             loss = F.nll_loss(outputs, y_true)
             loss.backward() # to obtain gradients of x
 
             #Add small perturbation
             epsilon = 0.1
             x_grad = torch.sign(x.grad.data)
-            x_adversarial = torch.clam(x.data + epsilon*x_grad,0,1)
+            x_adversarial = torch.clamp(x.data + epsilon*x_grad,0,1)
 
             #Classify after Adv_attack
-            y_pred_adversarial = np.argmax(super(Attack,self)(Variable(x_adversarial)).data.numpy())
+            y_pred_adversarial = np.argmax(self(Variable(x_adversarial)).data.numpy())
 
             if y_true.data.numpy() != y_pred:
                 print("MISCLASSIFICATION")
@@ -78,7 +78,7 @@ class Attack(Net):
                 y_trues_clean.append(y_true.data.numpy())
         print("Total missclassifications: ", totalMisclassification , " out of :", len(xs))
 
-        with open("bulk_mnist_fgsm_"+self.model+".pkl", "rb") as f:
+        with open("../utils/adv_examples/bulk_mnist_fgsm_"+self.model+".pkl", "wb") as f:
             adv_dta_dict = {
                 "xs" : xs_clean,
                 "y_trues" : y_trues_clean,

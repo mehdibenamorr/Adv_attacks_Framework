@@ -11,7 +11,7 @@ def flat_trans(x):
     return x
 
 def generate_samples(model):
-    if not os.path.isfile(".adv_examples/"+model+"_samples.pkl"):
+    if  os.path.isfile("../utils/adv_examples/"+model+"_samples.pkl"):
         pass
     else:
         mnist_transform = transforms.Lambda(flat_trans) if model == "FFN" else transforms.Normalize((0.1307,),
@@ -32,6 +32,6 @@ def generate_samples(model):
 
             if idx == 49:
                 break
-        with open(".adv_examples/"+model+"_samples.pkl", "wb") as f:
+        with open("../utils/adv_examples/"+model+"_samples.pkl", "wb") as f:
             data_dict = {"images": images, "labels": labels}
             pickle.dump(data_dict, f)
