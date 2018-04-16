@@ -5,10 +5,9 @@ from torch.autograd import Variable
 import torch.nn.functional as F
 from tqdm import *
 import pickle
-
 import os
 from source.models import Net
-from common import generate_samples
+from utils.common import generate_samples
 
 
 class Attack(Net):

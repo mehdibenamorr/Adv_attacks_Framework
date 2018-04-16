@@ -1,8 +1,7 @@
-from __future__ import print_function
 import argparse
 import torch
 from tqdm import *
-from models import Net
+from source.models import Net
 
 # Training settings
 parser = argparse.ArgumentParser(description='Train Mnist models')
