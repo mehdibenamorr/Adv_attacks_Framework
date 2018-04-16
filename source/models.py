@@ -2,7 +2,6 @@ import pickle
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-import torchvision
 import torch.optim as optim
 from torchvision import datasets, transforms
 from tqdm import *
