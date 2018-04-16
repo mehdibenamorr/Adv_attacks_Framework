@@ -41,7 +41,7 @@ class Net(nn.Module):
             self.fc1 = nn.Linear(28 * 28, 300)
             self.fc2 = nn.Linear(300, 100)
             self.fc3 = nn.Linear(100, 10)
-            # self.SoftmaxWithXent = nn.CrossEntropyLoss()
+            self.SoftmaxWithXent = nn.CrossEntropyLoss()
             if not args.attack:
                 self.optimizer = optim.SGD(self.parameters(), lr=self.args.lr, momentum=self.args.momentum, weight_decay=self.args.weight_decay)
                 mnist_transform = transforms.Compose(
@@ -71,46 +71,25 @@ class Net(nn.Module):
 
 
     def trainn(self,epoch):
-        # if self.model=="CNN":
-        super(Net,self).train()
+        if self.model=="CNN":
+            super(Net,self).train()
         for batch_idx, (data, target) in tqdm(enumerate(self.train_loader)):
             if self.args.cuda:
                 data, target = data.cuda(), target.cuda()
             data, target = Variable(data), Variable(target)
             self.optimizer.zero_grad()
-            output = self.forward(data)
-            loss = F.nll_loss(output, target)
+            output = self(data)
+            loss = F.nll_loss(output, target) if self.model=="CNN" else self.SoftmaxWithXent(output, target)
             loss.backward()
             self.optimizer.step()
             if batch_idx % self.args.log_interval == 0:
                 print('Train Epoch: {} [{}/{} ({:.0f}%)]\tLoss: {:.6f}'.format(
                     epoch, batch_idx * len(data), len(self.train_loader.dataset),
                            100. * batch_idx / len(self.train_loader), loss.data[0]))
-        # else:
-        #     print("Epoch: {}".format(epoch))
-        #     # import ipdb; ipdb.set_trace()
-        #     for batch_idx, (data, target) in tqdm(enumerate(self.train_loader)):
-        #         if self.args.cuda:
-        #             data, target = data.cuda(), target.cuda()
-        #         data, target = Variable(data), Variable(target)
-        #         # zero the gradients
-        #         self.optimizer.zero_grad()
-        #
-        #         # forward + loss + backward
-        #         outputs = self.forward(data)  # forward pass
-        #         loss = self.SoftmaxWithXent(outputs, target)  # compute softmax -> loss
-        #         loss.backward()  # get gradients on params
-        #         self.optimizer.step()  # SGD update
-        #
-        #         # print statistics
-        #         if batch_idx % self.args.log_interval == 0:
-        #             print('Train Epoch: {} [{}/{} ({:.0f}%)]\tLoss: {:.6f}'.format(
-        #                 epoch, batch_idx * len(data), len(self.train_loader.dataset),
-        #                        100. * batch_idx / len(self.train_loader), loss.data[0]))
-        #     # print('Epoch: {} | Loss: {}'.format(epoch, running_loss / 2000.0))
 
     def test(self):
         self.eval()
+        SoftmaxWithXent = nn.CrossEntropyLoss(size_average=False)
         test_loss = 0
         correct = 0
         for data, target in self.test_loader:
@@ -118,7 +97,7 @@ class Net(nn.Module):
                 data, target = data.cuda(), target.cuda()
             data, target = Variable(data, volatile=True), Variable(target)
             output = self.forward(data)
-            test_loss += F.nll_loss(output, target, size_average=False).data[0]  # sum up batch loss
+            test_loss =test_loss +  F.nll_loss(output, target, size_average=False).data[0] if self.model == "CNN" else test_loss + SoftmaxWithXent(output, target).data[0] # sum up batch loss
             pred = output.data.max(1, keepdim=True)[1]  # get the index of the max log-probability
             correct += pred.eq(target.data.view_as(pred)).long().cpu().sum()
 
