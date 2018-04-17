@@ -1,6 +1,8 @@
 #TODO write down adverasarail attacks method scripts in here
 import numpy as np
 import torch
+import torch.nn as nn
+import torch.optim as optim
 from torch.autograd import Variable
 import torch.nn.functional as F
 from tqdm import *
@@ -8,15 +10,25 @@ import pickle
 import os
 from source.models import Net
 from utils.common import generate_samples
-
+import random
 
 class Attack(Net):
     def __init__(self,args,kwargs=None):
         super(Attack,self).__init__(args,kwargs)
+        if args.method == "L_BFGS":
+            self.r = nn.Parameter(data=torch.zeros(1, 784),requires_grad=True) if args.model == "FFN" else nn.Parameter(data=torch.zeros(1, 1, 28 , 28), requires_grad=True)
+            self.SoftmaxWithXent = nn.CrossEntropyLoss()
+            self.optimizer = optim.SGD(params=[self.r], lr=0.008)
+
+    def forward(self, x):
+        if self.args.method == "L_BFGS":
+            x = x + self.r
+            x = torch.clamp(x, 0, 1)
+        x = super(Attack, self).forward(x)
+        return(x)
     def load_weights(self,weights=None):
         assert os.path.isfile(weights) , "Error: weight file {} is invalid, try training the model first".format(weights)
         #Load pre_trained model weigths
-        weights_dict = {}
         with open(weights , "rb") as f:
             weights_dict = pickle.load(f)
         for param in self.named_parameters():
@@ -25,7 +37,7 @@ class Attack(Net):
                 param[1].data = weights_dict[param[0]].data
         print("Weights loaded!")
 
-    def fgsm(self):
+    def FGSM(self):
         #TODO
         generate_samples(self.model)
         #Load Generated samples
@@ -79,5 +91,83 @@ class Attack(Net):
                 "y_preds" : y_preds,
                 "noised" : noises,
                 "y_preds_adversarial" : y_preds_adversarial
+            }
+            pickle.dump(adv_dta_dict, f)
+
+    def L_BFGS(self, norm="l2"):
+        # TODO validate results
+        generate_samples(self.model)
+        # Load Generated samples
+        with open("../utils/adv_examples/" + self.model + "_samples.pkl", "rb") as f:
+            samples_5k = pickle.load(f)
+        images = samples_5k["images"]
+        labels = samples_5k["labels"]
+        noises = []
+        y_preds = []
+        y_preds_adversarial = []
+        xs_clean = []
+        y_trues_clean = []
+        totalMisclassification = 0
+        for x, l in tqdm(zip(images, labels)):
+
+            # Random wrong label to fool the model with
+            l_target = random.choice(list(set([0, 1, 2, 3, 4, 5, 6, 7, 8, 9]) - set([l])))
+            _x = Variable(torch.FloatTensor(x)) if self.model == "FFN" else Variable(
+                torch.FloatTensor(x).unsqueeze(0))
+            _l_target = Variable(torch.LongTensor(np.array([l_target])))
+
+            # reset value of r
+            self.r.data = torch.zeros(1, 784) if self.model == "FFN" else torch.zeros(1, 1, 28 , 28)
+
+            # classify x before Adv_attack
+            y_pred = np.argmax(self(_x).data.numpy())
+
+            if l != y_pred:
+                print("Image was not classified correctly")
+
+            # Optimitzation box contrained
+            for i in range(1000):
+                self.optimizer.zero_grad()
+                output = self(_x)
+                loss = F.nll_loss(output, _l_target) if self.model == "CNN" else self.SoftmaxWithXent(output, _l_target)
+
+                # Norm used
+                if norm == "l1":
+                    adv_loss = loss + torch.mean(torch.abs(self.r))
+                elif norm == "l2":
+                    adv_loss = loss + torch.mean(torch.pow(self.r, 2))
+                else:
+                    adv_loss == loss
+
+                adv_loss.backward()
+                self.optimizer.step()
+
+                # Until output == y_target
+                y_pred_adversarial = np.argmax(self(_x).data.numpy())
+
+                if y_pred_adversarial == l_target:
+                    break
+
+                if i == 999:
+                    print("Results may be incorrect")
+
+            if y_pred == l:
+                xs_clean.append(x)
+                y_trues_clean.append(l)
+                y_preds.append(y_pred)
+                y_preds_adversarial.append(y_pred_adversarial)
+                noises.append(self.r.data.numpy().squeeze())
+            else:
+                print("y_pred != y_true, wrongly classified before attack -> not stored ")
+                totalMisclassification += 1
+        print("Total missclassifications: ", totalMisclassification, " out of :", len(images))
+
+        with open("../utils/adv_examples/bulk_mnist_lbfgs_" + self.model + ".pkl", "wb") as f:
+            adv_dta_dict = {
+                "xs": xs_clean,
+                "y_trues": y_trues_clean,
+                "y_preds": y_preds,
+                "noised": noises,
+                "y_preds_adversarial": y_preds_adversarial
             }
             pickle.dump(adv_dta_dict, f)
