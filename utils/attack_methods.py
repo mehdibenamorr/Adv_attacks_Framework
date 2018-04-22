@@ -17,7 +17,6 @@ class Attack(Net):
         super(Attack,self).__init__(args,kwargs)
         if args.method == "L_BFGS":
             self.r = nn.Parameter(data=torch.zeros(1, 784),requires_grad=True) if args.model == "FFN" else nn.Parameter(data=torch.zeros(1, 1, 28 , 28), requires_grad=True)
-            self.SoftmaxWithXent = nn.CrossEntropyLoss()
             self.Optimizer = optim.SGD(params=[self.r], lr=0.008)
 
     def forward(self, x):
@@ -51,6 +50,7 @@ class Attack(Net):
         xs_clean = []
         y_trues_clean = []
         totalMisclassification = 0
+        Adv_misclassification = 0
         for x, y_true in tqdm(zip(xs, y_trues)):
 
             #make x as Variable
@@ -68,7 +68,7 @@ class Attack(Net):
 
             #Generate Adv Image
             outputs = self(x)
-            loss = F.nll_loss(outputs, y_true)
+            loss = self.SoftmaxWithXent(outputs, y_true)
             loss.backward() # to obtain gradients of x
 
             #Add small perturbation
@@ -83,18 +83,22 @@ class Attack(Net):
                 y_true = y_true.cpu()
                 x = x.cpu()
                 x_adversarial = x_adversarial.cpu()
-
             if y_true.data.numpy() != y_pred:
                 print("MISCLASSIFICATION")
                 totalMisclassification +=1
             else:
+                if y_pred != y_pred_adversarial:
+                    Adv_misclassification += 1
                 y_preds.append(y_pred)
                 y_preds_adversarial.append(y_pred_adversarial)
                 noises.append((x_adversarial - x.data).numpy())
                 xs_clean.append(x.data.numpy())
                 y_trues_clean.append(y_true.data.numpy())
-        print("Total missclassifications: ", totalMisclassification , " out of :", len(xs))
-
+        print("Total misclassifications: ", totalMisclassification , " out of :", len(xs))
+        print('\nTotal misclassified adversarial examples : {} out of {}\nError_Rate is {:.0f}%'.format(
+            Adv_misclassification, len(y_preds_adversarial),
+            100. * Adv_misclassification / len(
+                y_preds_adversarial)))
         with open("utils/adv_examples/bulk_mnist_fgsm_"+self.model+".pkl", "wb") as f:
             adv_dta_dict = {
                 "xs" : xs_clean,
@@ -119,6 +123,7 @@ class Attack(Net):
         xs_clean = []
         y_trues_clean = []
         totalMisclassification = 0
+        Adv_misclassification = 0
         for x, l in tqdm(zip(images, labels)):
 
             # Random wrong label to fool the model with
@@ -148,7 +153,7 @@ class Attack(Net):
             for i in range(1000):
                 self.Optimizer.zero_grad()
                 output = self(_x)
-                loss = F.nll_loss(output, _l_target) if self.model == "CNN" else self.SoftmaxWithXent(output, _l_target)
+                loss = self.SoftmaxWithXent(output, _l_target)
 
                 # Norm used
                 if norm == "l1":
@@ -168,9 +173,11 @@ class Attack(Net):
                     break
 
                 if i == 999:
-                    print("Results may be incorrect")
+                    print("Results may be incorrect, Optimization run for 1000 iteration")
 
             if y_pred == l:
+                if y_pred_adversarial != y_pred:
+                    Adv_misclassification += 1
                 xs_clean.append(x)
                 y_trues_clean.append(l)
                 y_preds.append(y_pred)
@@ -179,8 +186,8 @@ class Attack(Net):
             else:
                 print("y_pred != y_true, wrongly classified before attack -> not stored ")
                 totalMisclassification += 1
-        print("Total missclassifications: ", totalMisclassification, " out of :", len(images))
-
+        print("Total misclassifications: ", totalMisclassification, " out of :", len(images))
+        print('\nTotal misclassified adversarial examples : {} out of {}\nError_Rate is {:.0f}%'.format(Adv_misclassification,len(y_preds_adversarial),100. * Adv_misclassification / len(y_preds_adversarial)))
         with open("utils/adv_examples/bulk_mnist_lbfgs_" + self.model + ".pkl", "wb") as f:
             adv_dta_dict = {
                 "xs": xs_clean,

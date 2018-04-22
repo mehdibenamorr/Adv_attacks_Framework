@@ -16,6 +16,7 @@ class Net(nn.Module):
         self.args=args
         self.kwargs=kwargs
         self.model = args.model
+        self.SoftmaxWithXent = nn.CrossEntropyLoss()
         if args.model == "CNN":
             self.conv1 = nn.Conv2d(1, 10, kernel_size=5)
             self.conv2 = nn.Conv2d(10, 20, kernel_size=5)
@@ -41,7 +42,6 @@ class Net(nn.Module):
             self.fc1 = nn.Linear(28 * 28, 300)
             self.fc2 = nn.Linear(300, 100)
             self.fc3 = nn.Linear(100, 10)
-            self.SoftmaxWithXent = nn.CrossEntropyLoss()
             if not args.attack:
                 self.optimizer = optim.SGD(self.parameters(), lr=self.args.lr, momentum=self.args.momentum, weight_decay=self.args.weight_decay)
                 mnist_transform = transforms.Compose(
@@ -79,7 +79,7 @@ class Net(nn.Module):
             data, target = Variable(data), Variable(target)
             self.optimizer.zero_grad()
             output = self(data)
-            loss = F.nll_loss(output, target) if self.model=="CNN" else self.SoftmaxWithXent(output, target)
+            loss = self.SoftmaxWithXent(output, target)
             loss.backward()
             self.optimizer.step()
             if batch_idx % self.args.log_interval == 0:
@@ -98,7 +98,9 @@ class Net(nn.Module):
             with torch.no_grad():
                 data, target = Variable(data), Variable(target)
             output = self.forward(data)
-            test_loss =test_loss +  F.nll_loss(output, target, size_average=False).data.item() if self.model == "CNN" else test_loss + SoftmaxWithXent(output, target).data.item() # sum up batch loss
+            import ipdb
+            ipdb.set_trace()
+            test_loss =test_loss +   SoftmaxWithXent(output, target).data.item() # sum up batch loss
             pred = output.data.max(1, keepdim=True)[1]  # get the index of the max log-probability
             correct += pred.eq(target.data.view_as(pred)).long().cpu().sum()
 
