@@ -24,14 +24,14 @@ class Net(nn.Module):
             self.fc2 = nn.Linear(50, 10)
             if not args.attack:
                 self.train_loader = torch.utils.data.DataLoader(
-                    datasets.MNIST('../data/CNN', train=True, download=True,
+                    datasets.MNIST('data/CNN', train=True, download=True,
                                    transform=transforms.Compose([
                                        transforms.ToTensor(),
                                        transforms.Normalize((0.1307,), (0.3081,))
                                    ])),
                     batch_size=self.args.batch_size, shuffle=True, **self.kwargs)
                 self.test_loader = torch.utils.data.DataLoader(
-                    datasets.MNIST('../data/CNN', train=False, transform=transforms.Compose([
+                    datasets.MNIST('data/CNN', train=False, transform=transforms.Compose([
                         transforms.ToTensor(),
                         transforms.Normalize((0.1307,), (0.3081,))
                     ])),
@@ -48,11 +48,11 @@ class Net(nn.Module):
                     [transforms.ToTensor(), transforms.Lambda(flat_trans)]
                 )
                 self.train_loader = torch.utils.data.DataLoader(
-                    datasets.MNIST('../data/FFN', train=True, download=True,
+                    datasets.MNIST('data/FFN', train=True, download=True,
                                    transform=mnist_transform),
                     batch_size=self.args.batch_size, shuffle=True, **self.kwargs)
                 self.test_loader = torch.utils.data.DataLoader(
-                    datasets.MNIST('../data/FFN', train=False, transform=mnist_transform),
+                    datasets.MNIST('data/FFN', train=False, transform=mnist_transform),
                     batch_size=self.args.test_batch_size, shuffle=True, **self.kwargs)
     def forward(self,x):
         if self.model == "CNN":
@@ -85,7 +85,7 @@ class Net(nn.Module):
             if batch_idx % self.args.log_interval == 0:
                 print('Train Epoch: {} [{}/{} ({:.0f}%)]\tLoss: {:.6f}'.format(
                     epoch, batch_idx * len(data), len(self.train_loader.dataset),
-                           100. * batch_idx / len(self.train_loader), loss.data[0]))
+                           100. * batch_idx / len(self.train_loader), loss.data.item()))
 
     def test(self):
         self.eval()
@@ -95,9 +95,10 @@ class Net(nn.Module):
         for data, target in self.test_loader:
             if self.args.cuda:
                 data, target = data.cuda(), target.cuda()
-            data, target = Variable(data, volatile=True), Variable(target)
+            with torch.no_grad():
+                data, target = Variable(data), Variable(target)
             output = self.forward(data)
-            test_loss =test_loss +  F.nll_loss(output, target, size_average=False).data[0] if self.model == "CNN" else test_loss + SoftmaxWithXent(output, target).data[0] # sum up batch loss
+            test_loss =test_loss +  F.nll_loss(output, target, size_average=False).data.item() if self.model == "CNN" else test_loss + SoftmaxWithXent(output, target).data.item() # sum up batch loss
             pred = output.data.max(1, keepdim=True)[1]  # get the index of the max log-probability
             correct += pred.eq(target.data.view_as(pred)).long().cpu().sum()
 
@@ -111,7 +112,7 @@ class Net(nn.Module):
         for param in list(self.named_parameters()):
             print ("Serializing Param" , param[0])
             weights_dict[param[0]]= param[1]
-        with open("../utils/trained/"+self.model+"_weights.pkl", "wb") as f:
+        with open("utils/trained/"+self.model+"_weights.pkl", "wb") as f:
             pickle.dump(weights_dict, f)
         print ("Finished dumping to disk...")
 
