@@ -146,36 +146,37 @@ class Attack(Net):
             # classify x before Adv_attack
             y_pred = np.argmax(self(_x).cpu().data.numpy()) if self.args.cuda else np.argmax(self(_x).data.numpy())
 
-            if l.data.numpy() != y_pred:
+            if l.data.item() != y_pred:
                 print("Image was not classified correctly")
+                print("y_pred != y_true, wrongly classified before attack -> not stored ")
+                totalMisclassification += 1
+            else:
+                # Optimitzation box contrained
+                for i in range(1000):
+                    self.Optimizer.zero_grad()
+                    output = self(_x)
+                    loss = self.SoftmaxWithXent(output, _l_target)
 
-            # Optimitzation box contrained
-            for i in range(1000):
-                self.Optimizer.zero_grad()
-                output = self(_x)
-                loss = self.SoftmaxWithXent(output, _l_target)
+                    # Norm used
+                    if norm == "l1":
+                        adv_loss = loss + torch.mean(torch.abs(self.r))
+                    elif norm == "l2":
+                        adv_loss = loss + torch.mean(torch.pow(self.r, 2))
+                    else:
+                        adv_loss == loss
 
-                # Norm used
-                if norm == "l1":
-                    adv_loss = loss + torch.mean(torch.abs(self.r))
-                elif norm == "l2":
-                    adv_loss = loss + torch.mean(torch.pow(self.r, 2))
-                else:
-                    adv_loss == loss
+                    adv_loss.backward()
+                    self.Optimizer.step()
 
-                adv_loss.backward()
-                self.Optimizer.step()
+                    # Until output == y_target
+                    y_pred_adversarial = np.argmax(self(_x).cpu().data.numpy()) if self.args.cuda else np.argmax(self(_x).data.numpy())
 
-                # Until output == y_target
-                y_pred_adversarial = np.argmax(self(_x).cpu().data.numpy()) if self.args.cuda else np.argmax(self(_x).data.numpy())
+                    if y_pred_adversarial == l_target:
+                        break
 
-                if y_pred_adversarial == l_target:
-                    break
+                    if i == 999:
+                        print("Results may be incorrect, Optimization run for 1000 iteration")
 
-                if i == 999:
-                    print("Results may be incorrect, Optimization run for 1000 iteration")
-
-            if y_pred == l:
                 if y_pred_adversarial != y_pred:
                     Adv_misclassification += 1
                 xs_clean.append(x)
@@ -183,9 +184,7 @@ class Attack(Net):
                 y_preds.append(y_pred)
                 y_preds_adversarial.append(y_pred_adversarial)
                 noises.append(self.r.cpu().data.numpy().squeeze() if self.args.cuda else self.r.data.numpy().squeeze)
-            else:
-                print("y_pred != y_true, wrongly classified before attack -> not stored ")
-                totalMisclassification += 1
+
         print("Total misclassifications: ", totalMisclassification, " out of :", len(images))
         print('\nTotal misclassified adversarial examples : {} out of {}\nError_Rate is {:.0f}%'.format(Adv_misclassification,len(y_preds_adversarial),100. * Adv_misclassification / len(y_preds_adversarial)))
         with open("utils/adv_examples/bulk_mnist_lbfgs_" + self.model + ".pkl", "wb") as f:
