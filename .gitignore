@@ -1,2 +1,12 @@
 # System/editor related stuff
-.idea/
+idea/*
+# Local files
+data/*
+.utils/adv_examples/*
+
+# unnecessary files
+*.pkl
+*.log
+*.xml
+*.pyc
+*.iml
