@@ -43,7 +43,7 @@ class FGSM(Attack):
         # TODO
         generate_samples(self.model)
         # Load Generated samples
-        with open("utils/" + self.model + "/5k_samples.pkl", "rb") as f:
+        with open("data/" + self.model + "/5k_samples.pkl", "rb") as f:
             samples_5k = pickle.load(f)
         xs = samples_5k["images"]
         y_trues = samples_5k["labels"]
@@ -134,7 +134,7 @@ class L_BFGS(Attack):
         # TODO validate results
         generate_samples(self.model)
         # Load Generated samples
-        with open("utils/" + self.model + "/5k_samples.pkl", "rb") as f:
+        with open("data/" + self.model + "/5k_samples.pkl", "rb") as f:
             samples_5k = pickle.load(f)
         images = samples_5k["images"]
         labels = samples_5k["labels"]

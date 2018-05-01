@@ -27,5 +27,5 @@ if __name__=="__main__":
         attacker = L_BFGS(args)
     if args.cuda:
         attacker.cuda()
-    attacker.load_weights("utils/trained/"+attacker.model+"_weights.pkl")
+    attacker.load_weights("models/trained/"+attacker.model+"_weights.pkl")
     attacker.attack()
