@@ -60,7 +60,7 @@ class Net(nn.Module):
         for param in list(self.named_parameters()):
             print ("Serializing Param" , param[0])
             weights_dict[param[0]]= param[1]
-        with open("utils/trained/"+self.model+"_weights.pkl", "wb") as f:
+        with open("models/trained/"+self.model+"_weights.pkl", "wb") as f:
             pickle.dump(weights_dict, f)
         print ("Finished dumping to disk...")
 

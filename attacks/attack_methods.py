@@ -9,7 +9,7 @@ from tqdm import *
 import pickle
 import os
 from models.models import *
-from utils.common import generate_samples
+from utils.common import generate_samples,vis_adv_org
 import random
 
 
@@ -20,6 +20,7 @@ class Attack(Net):
             self.Net = FFN(args,kwargs)
         elif self.model == "CNN":
             self.Net = CNN(args,kwargs)
+
     def load_weights(self,weights=None):
         assert os.path.isfile(weights) , "Error: weight file {} is invalid, try training the model first".format(weights)
         #Load pre_trained model weigths
@@ -97,6 +98,7 @@ class FGSM(Attack):
             else:
                 if y_pred != y_pred_adversarial:
                     Adv_misclassification += 1
+                    vis_adv_org(x,x_adversarial,y_pred,y_pred_adversarial)
                 y_preds.append(y_pred)
                 y_preds_adversarial.append(y_pred_adversarial)
                 noises.append((x_adversarial - x.data).numpy())
@@ -201,6 +203,8 @@ class L_BFGS(Attack):
 
                 if y_pred_adversarial != y_pred:
                     Adv_misclassification += 1
+                    print("Target class : {}".format(l_target))
+                    vis_adv_org(_x.cpu(),(_x+self.r).cpu(),y_pred,y_pred_adversarial)
                 xs_clean.append(x)
                 y_trues_clean.append(l)
                 y_preds.append(y_pred)
