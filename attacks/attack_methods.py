@@ -9,7 +9,7 @@ from tqdm import *
 import pickle
 import os
 from models.models import *
-from utils.common import generate_samples,vis_adv_org
+from utils.common import generate_samples,vis_adv_org,fgsm , l_bfgs
 import random
 
 
@@ -39,6 +39,20 @@ class FGSM(Attack):
 
     def forward(self, x):
         return self.Net(x)
+
+    # def fgsm(self,x,y_true,epsilon=0.1):
+    #
+    #     # Generate Adv Image
+    #     outputs = self(x)
+    #     loss = self.SoftmaxWithXent(outputs, y_true)
+    #     loss.backward()  # to obtain gradients of x
+    #
+    #     # Add small perturbation
+    #     x_grad = torch.sign(x.grad.data)
+    #     x_adversarial = torch.clamp(x.data + epsilon * x_grad, 0, 1)
+    #
+    #     return x_adversarial
+    #
 
     def attack(self):
         # TODO
@@ -73,15 +87,8 @@ class FGSM(Attack):
             # Classify x before Adv_attack
             y_pred = np.argmax(self(x).cpu().data.numpy()) if self.args.cuda else np.argmax(self(x).data.numpy())
 
-            # Generate Adv Image
-            outputs = self(x)
-            loss = self.SoftmaxWithXent(outputs, y_true)
-            loss.backward()  # to obtain gradients of x
-
-            # Add small perturbation
-            epsilon = 0.1
-            x_grad = torch.sign(x.grad.data)
-            x_adversarial = torch.clamp(x.data + epsilon * x_grad, 0, 1)
+            #generate an adversarial example
+            x_adversarial = fgsm(self,x,y_true,epsilon=0.1)
 
             # Classify after Adv_attack
             y_pred_adversarial = np.argmax(
@@ -98,7 +105,7 @@ class FGSM(Attack):
             else:
                 if y_pred != y_pred_adversarial:
                     Adv_misclassification += 1
-                    vis_adv_org(x,x_adversarial,y_pred,y_pred_adversarial)
+                    # vis_adv_org(x,x_adversarial,y_pred,y_pred_adversarial)
                 y_preds.append(y_pred)
                 y_preds_adversarial.append(y_pred_adversarial)
                 noises.append((x_adversarial - x.data).numpy())
@@ -109,7 +116,7 @@ class FGSM(Attack):
             Adv_misclassification, len(y_preds_adversarial),
             100. * Adv_misclassification / len(
                 y_preds_adversarial)))
-        with open("utils/adv_examples/bulk_mnist_fgsm_" + self.model + ".pkl", "wb") as f:
+        with open("utils/adv_examples/mnist_fgsm_" + self.model + ".pkl", "wb") as f:
             adv_dta_dict = {
                 "xs": xs_clean,
                 "y_trues": y_trues_clean,
@@ -120,6 +127,7 @@ class FGSM(Attack):
             pickle.dump(adv_dta_dict, f)
 
 class L_BFGS(Attack):
+
     def __init__(self,args,kwargs=None):
         super(L_BFGS,self).__init__(args,kwargs)
         self.r = nn.Parameter(data=torch.zeros(1, 784), requires_grad=True) if args.model == "FFN" else nn.Parameter(
@@ -132,7 +140,7 @@ class L_BFGS(Attack):
         x = self.Net(x)
         return (x)
 
-    def attack(self, norm='l2'):
+    def attack(self):
         # TODO validate results
         generate_samples(self.model)
         # Load Generated samples
@@ -174,37 +182,12 @@ class L_BFGS(Attack):
                 print("y_pred != y_true, wrongly classified before attack -> not stored ")
                 totalMisclassification += 1
             else:
-                # Optimitzation box contrained
-                for i in range(1000):
-                    self.Optimizer.zero_grad()
-                    output = self(_x)
-                    loss = self.SoftmaxWithXent(output, _l_target)
-
-                    # Norm used
-                    if norm == "l1":
-                        adv_loss = loss + torch.mean(torch.abs(self.r))
-                    elif norm == "l2":
-                        adv_loss = loss + torch.mean(torch.pow(self.r, 2))
-                    else:
-                        adv_loss == loss
-
-                    adv_loss.backward()
-                    self.Optimizer.step()
-
-                    # Until output == y_target
-                    y_pred_adversarial = np.argmax(self(_x).cpu().data.numpy()) if self.args.cuda else np.argmax(
-                        self(_x).data.numpy())
-
-                    if y_pred_adversarial == l_target:
-                        break
-
-                    if i == 999:
-                        print("Results may be incorrect, Optimization run for 1000 iteration")
+                #generate adversarial example
+                x_adversarial , y_pred_adversarial = l_bfgs(self,_x,_l_target,self.args.norm,self.args.max_iter)
 
                 if y_pred_adversarial != y_pred:
                     Adv_misclassification += 1
-                    print("Target class : {}".format(l_target))
-                    vis_adv_org(_x.cpu(),(_x+self.r).cpu(),y_pred,y_pred_adversarial)
+                    # vis_adv_org(_x.cpu(),x_adversarial.cpu(),y_pred,y_pred_adversarial,l_target)
                 xs_clean.append(x)
                 y_trues_clean.append(l)
                 y_preds.append(y_pred)
@@ -214,7 +197,7 @@ class L_BFGS(Attack):
         print("Total misclassifications: ", totalMisclassification, " out of :", len(images))
         print('\nTotal misclassified adversarial examples : {} out of {}\nError_Rate is {:.0f}%'.format(
             Adv_misclassification, len(y_preds_adversarial), 100. * Adv_misclassification / len(y_preds_adversarial)))
-        with open("utils/adv_examples/bulk_mnist_lbfgs_" + self.model + ".pkl", "wb") as f:
+        with open("utils/adv_examples/mnist_lbfgs_" + self.model + ".pkl", "wb") as f:
             adv_dta_dict = {
                 "xs": xs_clean,
                 "y_trues": y_trues_clean,

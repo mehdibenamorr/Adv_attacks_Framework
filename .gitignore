@@ -1,5 +1,6 @@
 # System/editor related stuff
 idea/*
+__pycache__/
 # Local files
 data/*
 .utils/adv_examples/*

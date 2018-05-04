@@ -6,9 +6,10 @@ import torch.optim as optim
 from torchvision import datasets, transforms
 from tqdm import *
 from torch.autograd import Variable
-from utils.common import flat_trans
-
+from utils.common import flat_trans,fgsm , l_bfgs
 #Define different deep learning models to attack
+
+# method_dict ={'FGSM':fgsm(),'L_BFGS':l_bfgs()}
 
 class Net(nn.Module):
     def __init__(self,args,kwargs=None):
@@ -32,6 +33,22 @@ class Net(nn.Module):
             self.optimizer.step()
             if batch_idx % self.args.log_interval == 0:
                 print('Train Epoch: {} [{}/{} ({:.0f}%)]\tLoss: {:.6f}'.format(
+                    epoch, batch_idx * len(data), len(self.train_loader.dataset),
+                           100. * batch_idx / len(self.train_loader), loss.data.item()))
+
+    def Adv_train(self,epoch):
+        for batch_idx, (data,target) in tqdm(enumerate(self.train_loader)):
+            if self.args.cuda:
+                data, target = data.cuda(),target.cuda()
+            data, target = Variable(data,requires_grad=True), Variable(target)
+            data_adv = fgsm(self, data, target, epsilon=0.1)
+            self.optimizer.zero_grad()
+            output = self(data_adv)
+            loss = self.SoftmaxWithXent(output, target)
+            loss.backward()
+            self.optimizer.step()
+            if batch_idx % self.args.log_interval == 0:
+                print('Adv_Train Epoch: {} [{}/{} ({:.0f}%)]\tLoss: {:.6f}'.format(
                     epoch, batch_idx * len(data), len(self.train_loader.dataset),
                            100. * batch_idx / len(self.train_loader), loss.data.item()))
 
@@ -64,13 +81,14 @@ class Net(nn.Module):
             pickle.dump(weights_dict, f)
         print ("Finished dumping to disk...")
 
+
 class FFN(Net):
+
     def __init__(self,args,kwargs):
         super(FFN,self).__init__(args,kwargs)
         self.fc1 = nn.Linear(28 * 28, 300)
         self.fc2 = nn.Linear(300, 100)
         self.fc3 = nn.Linear(100, 10)
-
 
     def Dataloader(self):
         self.optimizer = optim.SGD(self.parameters(), lr=self.args.lr, momentum=self.args.momentum,
@@ -85,13 +103,16 @@ class FFN(Net):
         self.test_loader = torch.utils.data.DataLoader(
             datasets.MNIST('data/FFN', train=False, transform=mnist_transform),
             batch_size=self.args.test_batch_size, shuffle=True, **self.kwargs)
+
     def forward(self,x):
         x = F.relu(self.fc1(x))
         x = F.relu(self.fc2(x))
         x = self.fc3(x)
         return (x)
 
+
 class CNN(Net):
+
     def __init__(self,args,kwargs):
         super(CNN,self).__init__(args,kwargs)
         self.conv1 = nn.Conv2d(1, 10, kernel_size=5)
@@ -99,7 +120,6 @@ class CNN(Net):
         self.conv2_drop = nn.Dropout2d()
         self.fc1 = nn.Linear(320, 50)
         self.fc2 = nn.Linear(50, 10)
-
 
     def Dataloader(self):
         self.optimizer = optim.SGD(self.parameters(), lr=self.args.lr, momentum=self.args.momentum)
@@ -116,6 +136,7 @@ class CNN(Net):
                 transforms.Normalize((0.1307,), (0.3081,))
             ])),
             batch_size=self.args.test_batch_size, shuffle=True, **self.kwargs)
+
     def forward(self,x):
         x = F.relu(F.max_pool2d(self.conv1(x), 2))
         x = F.relu(F.max_pool2d(self.conv2_drop(self.conv2(x)), 2))

@@ -4,12 +4,16 @@ import torch
 
 # Training settings
 parser = argparse.ArgumentParser(description='Attack Mnist models')
-parser.add_argument('--model', type=str, default="FFN", metavar='MD',
+parser.add_argument('--model', type=str, default="FFN",
                     help='model to attack (default: FFN)')
-parser.add_argument('--method', type=str, default="FGSM", metavar='A',
+parser.add_argument('--method', type=str, default="FGSM",
                     help='method to use for the adversarial attack (default: FGSM)')
-parser.add_argument('--seed', type=int, default=1, metavar='S',
+parser.add_argument('--seed', type=int, default=1,
                     help='random seed (default: 1)')
+parser.add_argument('--norm', type=str, default="l2",
+                    help='regularization norm (default: l2)')
+parser.add_argument('--max_iter', type=int, default=1000,
+                    help='maximum iter for l_bfgs optimization (default: 1000)')
 parser.add_argument('--no-cuda', action='store_true', default=False,
                     help='disables CUDA training')
 args = parser.parse_args()
