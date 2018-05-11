@@ -14,6 +14,8 @@ parser.add_argument('--norm', type=str, default="l2",
                     help='regularization norm (default: l2)')
 parser.add_argument('--max_iter', type=int, default=1000,
                     help='maximum iter for l_bfgs optimization (default: 1000)')
+parser.add_argument('--V', action='store_true', default=False,
+                    help='visualize generated adversarial examples')
 parser.add_argument('--no-cuda', action='store_true', default=False,
                     help='disables CUDA training')
 args = parser.parse_args()
@@ -25,10 +27,7 @@ if args.cuda:
     torch.cuda.manual_seed(args.seed)
 
 if __name__=="__main__":
-    if args.method == "FGSM":
-        attacker = FGSM(args)
-    else:
-        attacker = L_BFGS(args)
+    attacker = attacks[args.method](args)
     if args.cuda:
         attacker.cuda()
     attacker.load_weights("models/trained/"+attacker.model+"_weights.pkl")

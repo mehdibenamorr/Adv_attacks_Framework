@@ -2,6 +2,7 @@
 idea/*
 __pycache__/
 # Local files
+runs/
 data/*
 .utils/adv_examples/*
 

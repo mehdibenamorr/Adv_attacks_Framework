@@ -1,14 +1,12 @@
-
 import numpy as np
 import torch
 import torch.nn as nn
 import torch.optim as optim
 from torch.autograd import Variable
-import torch.nn.functional as F
 from tqdm import *
 import pickle
 import os
-from models.models import *
+from models.models import Net,FFN,CNN
 from utils.common import generate_samples,vis_adv_org,fgsm , l_bfgs
 import random
 
@@ -39,20 +37,6 @@ class FGSM(Attack):
 
     def forward(self, x):
         return self.Net(x)
-
-    # def fgsm(self,x,y_true,epsilon=0.1):
-    #
-    #     # Generate Adv Image
-    #     outputs = self(x)
-    #     loss = self.SoftmaxWithXent(outputs, y_true)
-    #     loss.backward()  # to obtain gradients of x
-    #
-    #     # Add small perturbation
-    #     x_grad = torch.sign(x.grad.data)
-    #     x_adversarial = torch.clamp(x.data + epsilon * x_grad, 0, 1)
-    #
-    #     return x_adversarial
-    #
 
     def attack(self):
         # TODO
@@ -105,7 +89,8 @@ class FGSM(Attack):
             else:
                 if y_pred != y_pred_adversarial:
                     Adv_misclassification += 1
-                    # vis_adv_org(x,x_adversarial,y_pred,y_pred_adversarial)
+                    if self.args.V :
+                        vis_adv_org(x,x_adversarial,y_pred,y_pred_adversarial)
                 y_preds.append(y_pred)
                 y_preds_adversarial.append(y_pred_adversarial)
                 noises.append((x_adversarial - x.data).numpy())
@@ -132,6 +117,8 @@ class L_BFGS(Attack):
         super(L_BFGS,self).__init__(args,kwargs)
         self.r = nn.Parameter(data=torch.zeros(1, 784), requires_grad=True) if args.model == "FFN" else nn.Parameter(
             data=torch.zeros(1, 1, 28, 28), requires_grad=True)
+        if self.args.cuda:
+            self.r.cuda()
         self.Optimizer = optim.SGD(params=[self.r], lr=0.008)
 
     def forward(self, x):
@@ -187,7 +174,8 @@ class L_BFGS(Attack):
 
                 if y_pred_adversarial != y_pred:
                     Adv_misclassification += 1
-                    # vis_adv_org(_x.cpu(),x_adversarial.cpu(),y_pred,y_pred_adversarial,l_target)
+                    if self.args.V :
+                        vis_adv_org(_x.cpu(),x_adversarial.cpu(),y_pred,y_pred_adversarial,l_target)
                 xs_clean.append(x)
                 y_trues_clean.append(l)
                 y_preds.append(y_pred)
@@ -206,3 +194,5 @@ class L_BFGS(Attack):
                 "y_preds_adversarial": y_preds_adversarial
             }
             pickle.dump(adv_dta_dict, f)
+
+attacks = {'FGSM' : FGSM, 'L_BFGS' : L_BFGS}

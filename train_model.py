@@ -1,6 +1,6 @@
 import argparse
 import torch
-from models.models import *
+from models.models import models
 
 # Training settings
 parser = argparse.ArgumentParser(description='Train Mnist models')
@@ -47,11 +47,7 @@ kwargs = {'num_workers' : 1 , 'pin_memory': True} if args.cuda else {}
 
 
 if __name__=="__main__":
-    if args.model == "FFN":
-        model = FFN(args,kwargs)
-    else:
-        model = CNN(args,kwargs)
-
+    model = models[args.model](args,kwargs)
     model.Dataloader()
     if args.cuda:
         model.cuda()
@@ -60,5 +56,5 @@ if __name__=="__main__":
         model.trainn(epoch)
         if args.adv_train:
             model.Adv_train(epoch)
-        model.test()
-    model.save()
+        model.test(epoch)
+    # model.save()

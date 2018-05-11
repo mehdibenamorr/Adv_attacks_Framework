@@ -6,10 +6,10 @@ import torch.optim as optim
 from torchvision import datasets, transforms
 from tqdm import *
 from torch.autograd import Variable
-from utils.common import flat_trans,fgsm , l_bfgs
+from utils.common import flat_trans, methods
+from tensorboardX import SummaryWriter
 #Define different deep learning models to attack
 
-# method_dict ={'FGSM':fgsm(),'L_BFGS':l_bfgs()}
 
 class Net(nn.Module):
     def __init__(self,args,kwargs=None):
@@ -17,6 +17,7 @@ class Net(nn.Module):
         self.args=args
         self.kwargs=kwargs
         self.model = args.model
+        self.writer = SummaryWriter(comment=args.model + '_training_epochs_' + str(args.epochs) + '_lr_' + str(args.lr))
         self.SoftmaxWithXent = nn.CrossEntropyLoss()
 
     def trainn(self,epoch):
@@ -31,28 +32,32 @@ class Net(nn.Module):
             loss = self.SoftmaxWithXent(output, target)
             loss.backward()
             self.optimizer.step()
+            #logging
+            self.writer.add_scalar('loss',loss.data.item(),(epoch*len(self.train_loader)))
             if batch_idx % self.args.log_interval == 0:
                 print('Train Epoch: {} [{}/{} ({:.0f}%)]\tLoss: {:.6f}'.format(
                     epoch, batch_idx * len(data), len(self.train_loader.dataset),
                            100. * batch_idx / len(self.train_loader), loss.data.item()))
 
-    def Adv_train(self,epoch):
+    def Adv_train(self,epoch,method="FGSM"):
         for batch_idx, (data,target) in tqdm(enumerate(self.train_loader)):
             if self.args.cuda:
                 data, target = data.cuda(),target.cuda()
             data, target = Variable(data,requires_grad=True), Variable(target)
-            data_adv = fgsm(self, data, target, epsilon=0.1)
+            data_adv = methods[method](self, data, target, epsilon=0.1)
             self.optimizer.zero_grad()
             output = self(data_adv)
             loss = self.SoftmaxWithXent(output, target)
             loss.backward()
             self.optimizer.step()
+            # logging
+            self.writer.add_scalar('Adv_loss', loss.data.item(), (epoch * len(self.train_loader)))
             if batch_idx % self.args.log_interval == 0:
                 print('Adv_Train Epoch: {} [{}/{} ({:.0f}%)]\tLoss: {:.6f}'.format(
                     epoch, batch_idx * len(data), len(self.train_loader.dataset),
                            100. * batch_idx / len(self.train_loader), loss.data.item()))
 
-    def test(self):
+    def test(self,epoch):
         self.eval()
         SoftmaxWithXent = nn.CrossEntropyLoss(size_average=False)
         test_loss = 0
@@ -68,6 +73,8 @@ class Net(nn.Module):
             correct += pred.eq(target.data.view_as(pred)).long().cpu().sum()
 
         test_loss /= len(self.test_loader.dataset)
+        # logging
+        self.writer.add_scalar('test_loss', test_loss, epoch)
         print('\nTest set: Average loss: {:.4f}, Accuracy: {}/{} ({:.0f}%)\n'.format(
             test_loss, correct, len(self.test_loader.dataset),
             100. * correct / len(self.test_loader.dataset)))
@@ -145,3 +152,5 @@ class CNN(Net):
         x = F.dropout(x, training=self.training)
         x = self.fc2(x)
         return F.log_softmax(x, dim=1)
+
+models={'FFN' : FFN, 'CNN' : CNN}

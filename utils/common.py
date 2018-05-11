@@ -91,3 +91,5 @@ def l_bfgs(self,_x,_l_target,norm,max_iter):
     x_adversarial = _x + self.r
 
     return x_adversarial, y_pred_adversarial
+
+methods ={'FGSM':fgsm,'L_BFGS':l_bfgs}
