@@ -8,6 +8,7 @@ from tqdm import *
 from torch.autograd import Variable
 from utils.common import flat_trans, methods
 from tensorboardX import SummaryWriter
+import networkx as netx
 #Define different deep learning models to attack
 
 
@@ -17,7 +18,7 @@ class Net(nn.Module):
         self.args=args
         self.kwargs=kwargs
         self.model = args.model
-        self.writer = SummaryWriter(comment=args.model + '_training_epochs_' + str(args.epochs) + '_lr_' + str(args.lr))
+        # self.writer = SummaryWriter(comment=args.model + '_training_epochs_' + str(args.epochs) + '_lr_' + str(args.lr))
         self.SoftmaxWithXent = nn.CrossEntropyLoss()
 
     def trainn(self,epoch):
@@ -33,7 +34,7 @@ class Net(nn.Module):
             loss.backward()
             self.optimizer.step()
             #logging
-            self.writer.add_scalar('loss',loss.data.item(),(epoch*len(self.train_loader)))
+            # self.writer.add_scalar('loss',loss.data.item(),(epoch*len(self.train_loader)))
             if batch_idx % self.args.log_interval == 0:
                 print('Train Epoch: {} [{}/{} ({:.0f}%)]\tLoss: {:.6f}'.format(
                     epoch, batch_idx * len(data), len(self.train_loader.dataset),
@@ -51,7 +52,7 @@ class Net(nn.Module):
             loss.backward()
             self.optimizer.step()
             # logging
-            self.writer.add_scalar('Adv_loss', loss.data.item(), (epoch * len(self.train_loader)))
+            # self.writer.add_scalar('Adv_loss', loss.data.item(), (epoch * len(self.train_loader)))
             if batch_idx % self.args.log_interval == 0:
                 print('Adv_Train Epoch: {} [{}/{} ({:.0f}%)]\tLoss: {:.6f}'.format(
                     epoch, batch_idx * len(data), len(self.train_loader.dataset),
@@ -74,7 +75,7 @@ class Net(nn.Module):
 
         test_loss /= len(self.test_loader.dataset)
         # logging
-        self.writer.add_scalar('test_loss', test_loss, epoch)
+        # self.writer.add_scalar('test_loss', test_loss, epoch)
         print('\nTest set: Average loss: {:.4f}, Accuracy: {}/{} ({:.0f}%)\n'.format(
             test_loss, correct, len(self.test_loader.dataset),
             100. * correct / len(self.test_loader.dataset)))
@@ -152,5 +153,10 @@ class CNN(Net):
         x = F.dropout(x, training=self.training)
         x = self.fc2(x)
         return F.log_softmax(x, dim=1)
+
+class SNN(Net):
+    def __init(self,args,kwargs):
+        super(SNN,self).__init__(args,kwargs)
+        #TODO write down the generation script and figure how to train a basic model.
 
 models={'FFN' : FFN, 'CNN' : CNN}
