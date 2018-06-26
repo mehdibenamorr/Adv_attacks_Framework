@@ -8,7 +8,7 @@ from tqdm import *
 from torch.autograd import Variable
 from utils.common import flat_trans, methods
 from tensorboardX import SummaryWriter
-import networkx as netx
+
 #Define different deep learning models to attack
 
 
