@@ -94,7 +94,7 @@ class Layer(nn.Module):
         self.out_dim = out_dim
         self.predecessors = predecessors
         self.vertices = vertices
-        self.weights = []
+        weights = []
         self.act_masks = []
         self.w_masks = []
         for i,pred in enumerate(self.predecessors):
@@ -113,8 +113,8 @@ class Layer(nn.Module):
             # import ipdb
             # ipdb.set_trace()
             # self.weights.append(nn.Parameter(torch.normal(mean=torch.zeros(out_dim,in_dims[i]).masked_select(mask), std=0.1)))
-            self.weights.append(nn.Parameter(torch.normal(mean=torch.zeros(out_dim,in_dims[i]), std=0.1)))
-
+            weights.append(nn.Parameter(torch.normal(mean=torch.zeros(out_dim,in_dims[i]), std=0.1)))
+        self.weights = nn.ParameterList(weights)
         if bias:
             self.bias = nn.Parameter(torch.normal(mean=torch.zeros(out_dim), std=0.1))
         else:
@@ -137,10 +137,11 @@ class SNN(Net):
         # Using matrix multiplactions
         self.input_layer = nn.Linear(784, len(vertex_by_layers[0]))
         self.output_layer = nn.Linear(len(vertex_by_layers[-1]),10)
-        self.layers = []
+        layers = []
         for i in range(1,len(vertex_by_layers)):
-            self.layers.append(Layer([len(layer) for layer in vertex_by_layers[:i]],
+            layers.append(Layer([len(layer) for layer in vertex_by_layers[:i]],
                                          len(vertex_by_layers[i]),vertex_by_layers[i],vertex_by_layers[:i]))
+        self.layers = nn.ModuleList(layers)
         # import ipdb
         # ipdb.set_trace()
 
@@ -173,7 +174,8 @@ model = SNN(args,kwargs)
 model.Dataloader()
 if args.cuda:
     model.cuda()
-
+import ipdb
+ipdb.set_trace()
 for epoch in range(1, args.epochs + 1):
     model.trainn(epoch)
     model.test(epoch)
