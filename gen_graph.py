@@ -7,6 +7,8 @@ import torch.nn as nn
 from torch.autograd import Variable
 import torch.optim  as optim
 import torch.nn.functional as F
+from torchvision import datasets, transforms
+from utils.common import flat_trans
 from random import randint
 import matplotlib.pyplot as plt
 
@@ -24,7 +26,7 @@ parser.add_argument('--lr', type=float, default=0.001,
                     help='learning rate (default: 0.001)')
 parser.add_argument('--momentum', type=float, default=0.9,
                     help='SGD momentum (default: 0.9)')
-parser.add_argument('--no-cuda', action='store_true', default=False,
+parser.add_argument('--no-cuda', action='store_true', default=True,
                     help='disables CUDA training')
 parser.add_argument('--seed', type=int, default=1,
                     help='random seed (default: 1)')
@@ -43,9 +45,17 @@ parser.add_argument('--k', type=int, default=3,
 
 
 args = parser.parse_args()
+args.cuda = not args.no_cuda and torch.cuda.is_available()
 
 
-nodes = [100,200,300,400,500,600,700,800,1000]
+torch.manual_seed(args.seed)
+
+if args.cuda:
+    torch.cuda.manual_seed(args.seed)
+
+kwargs = {'num_workers' : 1 , 'pin_memory': True} if args.cuda else {}
+
+# nodes = [100,200,300,400,500,600,700,800,1000]
 
 
 def generate_random_dag(N, k, p):
@@ -100,20 +110,20 @@ class Layer(nn.Module):
                         act_mask[ind] = 1
             self.act_masks.append(act_mask)
             self.w_masks.append(mask)
-            import ipdb
-            ipdb.set_trace()
+            # import ipdb
+            # ipdb.set_trace()
             # self.weights.append(nn.Parameter(torch.normal(mean=torch.zeros(out_dim,in_dims[i]).masked_select(mask), std=0.1)))
             self.weights.append(nn.Parameter(torch.normal(mean=torch.zeros(out_dim,in_dims[i]), std=0.1)))
 
         if bias:
-            self.bias = nn.Parameter(torch.normal(mean=torch.zeros(out_dim,1), std=0.1))
+            self.bias = nn.Parameter(torch.normal(mean=torch.zeros(out_dim), std=0.1))
         else:
             self.register_parameter('bias', None)
 
     def forward(self, inputs):
-        output = torch.zeros(self.out_dim,1)
+        output = torch.zeros(self.out_dim)
         for i, inp in enumerate(inputs):
-            output += self.weights[i].mul(self.w_masks[i]).mm(inp)
+            output = output.add(inp.matmul(self.weights[i].mul(self.w_masks[i]).t()) + self.bias)
         return output
 
 
@@ -131,8 +141,22 @@ class SNN(Net):
         for i in range(1,len(vertex_by_layers)):
             self.layers.append(Layer([len(layer) for layer in vertex_by_layers[:i]],
                                          len(vertex_by_layers[i]),vertex_by_layers[i],vertex_by_layers[:i]))
-        import ipdb
-        ipdb.set_trace()
+        # import ipdb
+        # ipdb.set_trace()
+
+    def Dataloader(self):
+        self.optimizer = optim.SGD(self.parameters(), lr=self.args.lr, momentum=self.args.momentum,
+                                   weight_decay=self.args.weight_decay)
+        mnist_transform = transforms.Compose(
+            [transforms.ToTensor(), transforms.Lambda(flat_trans)]
+        )
+        self.train_loader = torch.utils.data.DataLoader(
+            datasets.MNIST('data/FFN', train=True, download=True,
+                           transform=mnist_transform),
+            batch_size=self.args.batch_size, shuffle=True, **self.kwargs)
+        self.test_loader = torch.utils.data.DataLoader(
+            datasets.MNIST('data/FFN', train=False, transform=mnist_transform),
+            batch_size=self.args.test_batch_size, shuffle=True, **self.kwargs)
 
     def forward(self, x):
         activations = []
@@ -145,8 +169,16 @@ class SNN(Net):
         return x
 
 
-model = SNN(args)
+model = SNN(args,kwargs)
+model.Dataloader()
+if args.cuda:
+    model.cuda()
 
+for epoch in range(1, args.epochs + 1):
+    model.trainn(epoch)
+    model.test(epoch)
+import ipdb
+ipdb.set_trace()
 
 
 
