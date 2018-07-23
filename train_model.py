@@ -48,9 +48,9 @@ kwargs = {'num_workers' : 1 , 'pin_memory': True} if args.cuda else {}
 
 if __name__=="__main__":
     model = models[args.model](args,kwargs)
-    model.Dataloader()
     if args.cuda:
         model.cuda()
+    model.Dataloader()
 
     for epoch in range(1,args.epochs+1):
         model.trainn(epoch)

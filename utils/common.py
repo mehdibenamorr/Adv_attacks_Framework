@@ -4,7 +4,7 @@ import os
 import pickle
 import matplotlib.pyplot as plt
 import numpy as np
-
+from igraph import *
 
 def flat_trans(x):
     x.resize_(28*28)
@@ -92,4 +92,47 @@ def l_bfgs(self,_x,_l_target,norm,max_iter):
 
     return x_adversarial, y_pred_adversarial
 
+
+def generate_random_dag(N, k, p):
+
+    g = Graph.Watts_Strogatz(1,N,k,p)
+    Adj_matrix = np.tril(np.array(g.get_adjacency().data)).tolist()
+    g = Graph.Adjacency(Adj_matrix)
+    g.to_directed()
+
+    # g = Graph()
+    # for x in range(200):
+    #     g.add_vertex(x)
+    # for i in range(100):
+    #     for j in range(100):
+    #         g.add_edge(i,100+j)
+    # Adj_matrix = np.tril(np.array(g.get_adjacency().data)).tolist()
+    # g = Graph.Adjacency(Adj_matrix)
+    # g.to_directed()
+    return g
+
+
+def layer_indexing(g):
+    # vertices_index = [-1 for i in range(len(g.vs))]
+    # for v in g.vs:
+    #     if v.indegree() == 0:
+    #         vertices_index[v.index] = 0
+    # num_unindexed_vertices = len(g.vs)
+    unindexed_vertices = [v for v in g.vs if v.indegree()>0]
+    vertices_index = [0 if v.indegree()<1 else -1 for v in g.vs]
+    while len(unindexed_vertices) > 0 :
+        for v in unindexed_vertices:
+            in_edges = v.predecessors()
+            ind = { vertices_index[vv.index] for vv in in_edges }
+            if -1 not in ind:
+                vertices_index[v.index] = max(ind) + 1
+                unindexed_vertices.remove(v)
+            else:
+                continue
+    vertex_by_layers = [ [] for k in range(max(vertices_index)+1)]
+    for i in range(len(vertices_index)):
+        vertex_by_layers[vertices_index[i]].append(g.vs[i])
+    # import ipdb
+    # ipdb.set_trace()
+    return vertex_by_layers
 methods ={'FGSM':fgsm,'L_BFGS':l_bfgs}

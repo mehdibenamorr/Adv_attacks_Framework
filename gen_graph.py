@@ -14,8 +14,8 @@ import matplotlib.pyplot as plt
 
 # Training settings
 parser = argparse.ArgumentParser(description='Generate SNNs and train')
-parser.add_argument('--model', type=str, default="FFN",
-                    help='model to train (default: FFN)')
+parser.add_argument('--model', type=str, default="SNN",
+                    help='model to train (default: SNN)')
 parser.add_argument('--batch-size', type=int, default=256,
                     help='input batch size for training (default: 256)')
 parser.add_argument('--test-batch-size', type=int, default=256,
@@ -26,7 +26,7 @@ parser.add_argument('--lr', type=float, default=0.001,
                     help='learning rate (default: 0.001)')
 parser.add_argument('--momentum', type=float, default=0.9,
                     help='SGD momentum (default: 0.9)')
-parser.add_argument('--no-cuda', action='store_true', default=True,
+parser.add_argument('--no-cuda', action='store_true', default=False,
                     help='disables CUDA training')
 parser.add_argument('--seed', type=int, default=1,
                     help='random seed (default: 1)')
@@ -34,13 +34,13 @@ parser.add_argument('--log-interval', type=int, default=50,
                     help='how many batches to wait before logging training status')
 parser.add_argument('--weight_decay', type=float, default=1e-04,
                     help='weigth_decay rate')
-parser.add_argument('--nodes', type=int, default=100,
+parser.add_argument('--nodes', type=int, default=300,
                     help='number of nodes (default: 10)')
-parser.add_argument('--m', type=int, default=3,
+parser.add_argument('--m', type=int, default=5,
                     help='number of edges to attach a new node to existing ones (default: 3)')
-parser.add_argument('--p', type=float, default=0.5,
+parser.add_argument('--p', type=float, default=0.7,
                     help='probability for edge creation (default: 0.5)')
-parser.add_argument('--k', type=int, default=3,
+parser.add_argument('--k', type=int, default=6,
                     help='Each node is joined with its k nearest neighbors in a ring topology (default: 1)')
 
 
@@ -64,43 +64,59 @@ def generate_random_dag(N, k, p):
     Adj_matrix = np.tril(np.array(g.get_adjacency().data)).tolist()
     g = Graph.Adjacency(Adj_matrix)
     g.to_directed()
+
+    # g = Graph()
+    # for x in range(200):
+    #     g.add_vertex(x)
+    # for i in range(100):
+    #     for j in range(100):
+    #         g.add_edge(i,100+j)
+    # Adj_matrix = np.tril(np.array(g.get_adjacency().data)).tolist()
+    # g = Graph.Adjacency(Adj_matrix)
+    # g.to_directed()
     return g
 
 
 def layer_indexing(g):
-    vertices_index = [-1 for i in range(len(g.vs))]
-    for v in g.vs:
-        if v.indegree() == 0:
-            vertices_index[v.index] = 0
-    while -1 in vertices_index:
-        for v in g.vs:
-            if v.indegree() > 0 and vertices_index[v.index] == -1 :
-                in_edges = v.predecessors()
-                ind = { vertices_index[vv.index] for vv in in_edges }
-                if -1 not in ind:
-                    vertices_index[v.index] = max(ind.union({-1})) + 1
-                else:
-                    continue
+    # vertices_index = [-1 for i in range(len(g.vs))]
+    # for v in g.vs:
+    #     if v.indegree() == 0:
+    #         vertices_index[v.index] = 0
+    # num_unindexed_vertices = len(g.vs)
+    unindexed_vertices = [v for v in g.vs if v.indegree()>0]
+    vertices_index = [0 if v.indegree()<1 else -1 for v in g.vs]
+    while len(unindexed_vertices) > 0 :
+        for v in unindexed_vertices:
+            in_edges = v.predecessors()
+            ind = { vertices_index[vv.index] for vv in in_edges }
+            if -1 not in ind:
+                vertices_index[v.index] = max(ind) + 1
+                unindexed_vertices.remove(v)
+            else:
+                continue
     vertex_by_layers = [ [] for k in range(max(vertices_index)+1)]
     for i in range(len(vertices_index)):
         vertex_by_layers[vertices_index[i]].append(g.vs[i])
+    # import ipdb
+    # ipdb.set_trace()
     return vertex_by_layers
 
 
 class Layer(nn.Module):
-    def __init__(self, in_dims, out_dim, vertices, predecessors, bias=True):
+    def __init__(self, in_dims, out_dim, vertices, predecessors, cuda, bias=True):
         super(Layer,self).__init__()
         self.in_dims = in_dims
         self.out_dim = out_dim
         self.predecessors = predecessors
         self.vertices = vertices
+        self.cuda = cuda
         weights = []
         self.act_masks = []
         self.w_masks = []
         for i,pred in enumerate(self.predecessors):
-            # mask = torch.ByteTensor(np.zeros((out_dim, in_dims[i])))
-            # act_mask = torch.ByteTensor(np.zeros(in_dims[i]))
             mask = torch.zeros((out_dim, in_dims[i]))
+            if cuda:
+                mask = mask.cuda()
             act_mask = torch.zeros(in_dims[i])
             for j,v in enumerate(self.vertices):
                 for p in v.predecessors():
@@ -112,7 +128,6 @@ class Layer(nn.Module):
             self.w_masks.append(mask)
             # import ipdb
             # ipdb.set_trace()
-            # self.weights.append(nn.Parameter(torch.normal(mean=torch.zeros(out_dim,in_dims[i]).masked_select(mask), std=0.1)))
             weights.append(nn.Parameter(torch.normal(mean=torch.zeros(out_dim,in_dims[i]), std=0.1)))
         self.weights = nn.ParameterList(weights)
         if bias:
@@ -122,6 +137,8 @@ class Layer(nn.Module):
 
     def forward(self, inputs):
         output = torch.zeros(self.out_dim)
+        if self.cuda:
+            output = output.cuda()
         for i, inp in enumerate(inputs):
             output = output.add(inp.matmul(self.weights[i].mul(self.w_masks[i]).t()) + self.bias)
         return output
@@ -140,14 +157,15 @@ class SNN(Net):
         layers = []
         for i in range(1,len(vertex_by_layers)):
             layers.append(Layer([len(layer) for layer in vertex_by_layers[:i]],
-                                         len(vertex_by_layers[i]),vertex_by_layers[i],vertex_by_layers[:i]))
+                                         len(vertex_by_layers[i]),vertex_by_layers[i],vertex_by_layers[:i],self.args.cuda))
         self.layers = nn.ModuleList(layers)
         # import ipdb
         # ipdb.set_trace()
 
     def Dataloader(self):
-        self.optimizer = optim.SGD(self.parameters(), lr=self.args.lr, momentum=self.args.momentum,
-                                   weight_decay=self.args.weight_decay)
+        # self.optimizer = optim.SGD(self.parameters(), lr=self.args.lr, momentum=self.args.momentum,
+        #                            weight_decay=self.args.weight_decay)
+        self.optimizer = optim.Adam(self.parameters())
         mnist_transform = transforms.Compose(
             [transforms.ToTensor(), transforms.Lambda(flat_trans)]
         )
@@ -165,22 +183,23 @@ class SNN(Net):
         activations.append(x)
         for layer in self.layers:
             activations.append(F.relu(layer(activations)))
-        x = self.output_layer(activations[-1])
+        x = F.relu(self.output_layer(activations[-1]))
 
         return x
 
 
 model = SNN(args,kwargs)
-model.Dataloader()
 if args.cuda:
     model.cuda()
-import ipdb
-ipdb.set_trace()
+model.Dataloader()
+
+# import ipdb
+# ipdb.set_trace()
 for epoch in range(1, args.epochs + 1):
     model.trainn(epoch)
     model.test(epoch)
-import ipdb
-ipdb.set_trace()
+# import ipdb
+# ipdb.set_trace()
 
 
 

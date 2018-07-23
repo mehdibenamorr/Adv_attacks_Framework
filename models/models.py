@@ -6,7 +6,8 @@ import torch.optim as optim
 from torchvision import datasets, transforms
 from tqdm import *
 from torch.autograd import Variable
-from utils.common import flat_trans, methods
+from utils.common import flat_trans, methods, generate_random_dag, layer_indexing
+from igraph import *
 from tensorboardX import SummaryWriter
 
 #Define different deep learning models to attack
@@ -154,9 +155,91 @@ class CNN(Net):
         x = self.fc2(x)
         return F.log_softmax(x, dim=1)
 
+
+class Layer(nn.Module):
+    def __init__(self, in_dims, out_dim, vertices, predecessors, cuda, bias=True):
+        super(Layer,self).__init__()
+        self.in_dims = in_dims
+        self.out_dim = out_dim
+        self.predecessors = predecessors
+        self.vertices = vertices
+        self.cuda = cuda
+        weights = []
+        self.act_masks = []
+        self.w_masks = []
+        for i,pred in enumerate(self.predecessors):
+            mask = torch.zeros((out_dim, in_dims[i]))
+            if cuda:
+                mask = mask.cuda()
+            act_mask = torch.zeros(in_dims[i])
+            for j,v in enumerate(self.vertices):
+                for p in v.predecessors():
+                    if p in pred:
+                        ind = pred.index(p)
+                        mask[j, ind] = 1
+                        act_mask[ind] = 1
+            self.act_masks.append(act_mask)
+            self.w_masks.append(mask)
+            # import ipdb
+            # ipdb.set_trace()
+            weights.append(nn.Parameter(torch.normal(mean=torch.zeros(out_dim,in_dims[i]), std=0.1)))
+        self.weights = nn.ParameterList(weights)
+        if bias:
+            self.bias = nn.Parameter(torch.normal(mean=torch.zeros(out_dim), std=0.1))
+        else:
+            self.register_parameter('bias', None)
+
+    def forward(self, inputs):
+        output = torch.zeros(self.out_dim)
+        if self.cuda:
+            output = output.cuda()
+        for i, inp in enumerate(inputs):
+            output = output.add(inp.matmul(self.weights[i].mul(self.w_masks[i]).t()) + self.bias)
+        return output
+
+
 class SNN(Net):
     def __init(self,args,kwargs):
         super(SNN,self).__init__(args,kwargs)
-        #TODO write down the generation script and figure how to train a basic model.
+        self.graph = generate_random_dag(args.nodes, args.k, args.p)
+        vertex_by_layers = layer_indexing(self.graph)
+        l = self.graph.layout('fr')
+        plot(self.graph, layout=l)
+        # Using matrix multiplactions
+        self.input_layer = nn.Linear(784, len(vertex_by_layers[0]))
+        self.output_layer = nn.Linear(len(vertex_by_layers[-1]), 10)
+        layers = []
+        for i in range(1, len(vertex_by_layers)):
+            layers.append(Layer([len(layer) for layer in vertex_by_layers[:i]],
+                                len(vertex_by_layers[i]), vertex_by_layers[i], vertex_by_layers[:i], self.args.cuda))
+        self.layers = nn.ModuleList(layers)
+        # import ipdb
+        # ipdb.set_trace()
 
-models={'FFN' : FFN, 'CNN' : CNN}
+    def Dataloader(self):
+        # self.optimizer = optim.SGD(self.parameters(), lr=self.args.lr, momentum=self.args.momentum,
+        #                            weight_decay=self.args.weight_decay)
+        self.optimizer = optim.Adam(self.parameters())
+        mnist_transform = transforms.Compose(
+            [transforms.ToTensor(), transforms.Lambda(flat_trans)]
+        )
+        self.train_loader = torch.utils.data.DataLoader(
+            datasets.MNIST('data/FFN', train=True, download=True,
+                           transform=mnist_transform),
+            batch_size=self.args.batch_size, shuffle=True, **self.kwargs)
+        self.test_loader = torch.utils.data.DataLoader(
+            datasets.MNIST('data/FFN', train=False, transform=mnist_transform),
+            batch_size=self.args.test_batch_size, shuffle=True, **self.kwargs)
+
+    def forward(self, x):
+        activations = []
+        x = F.relu(self.input_layer(x))
+        activations.append(x)
+        for layer in self.layers:
+            activations.append(F.relu(layer(activations)))
+        x = F.relu(self.output_layer(activations[-1]))
+
+        return x
+
+
+models={'FFN' : FFN, 'CNN' : CNN, 'SNN' : SNN}
