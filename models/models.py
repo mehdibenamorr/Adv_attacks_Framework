@@ -80,6 +80,10 @@ class Net(nn.Module):
         print('\nTest set: Average loss: {:.4f}, Accuracy: {}/{} ({:.0f}%)\n'.format(
             test_loss, correct, len(self.test_loader.dataset),
             100. * correct / len(self.test_loader.dataset)))
+        acc = 100. * correct / len(self.test_loader.dataset)
+        if epoch == self.args.epochs and acc >= self.args.threshold:
+            self.save()
+
     def save(self):
         print ("Dumping weights to disk")
         weights_dict = {}
@@ -199,7 +203,7 @@ class Layer(nn.Module):
 
 
 class SNN(Net):
-    def __init(self,args,kwargs):
+    def __init__(self,args,kwargs):
         super(SNN,self).__init__(args,kwargs)
         self.graph = generate_random_dag(args.nodes, args.k, args.p)
         vertex_by_layers = layer_indexing(self.graph)
@@ -213,8 +217,6 @@ class SNN(Net):
             layers.append(Layer([len(layer) for layer in vertex_by_layers[:i]],
                                 len(vertex_by_layers[i]), vertex_by_layers[i], vertex_by_layers[:i], self.args.cuda))
         self.layers = nn.ModuleList(layers)
-        # import ipdb
-        # ipdb.set_trace()
 
     def Dataloader(self):
         # self.optimizer = optim.SGD(self.parameters(), lr=self.args.lr, momentum=self.args.momentum,
@@ -241,5 +243,15 @@ class SNN(Net):
 
         return x
 
+    def save(self):
+        torch.save(self.state_dict(), "tests/"+self.model+"_"+self.args.config_file.split('/')[1]+".pt")
+        # print ("Dumping weights to disk")
+        # weights_dict = {}
+        # for param in list(self.named_parameters()):
+        #     print ("Serializing Param" , param[0])
+        #     weights_dict[param[0]]= param[1]
+        # with open("models/trained/"+self.model+"_weights.pkl", "wb") as f:
+        #     pickle.dump(weights_dict, f)
+        # print ("Finished dumping to disk...")
 
 models={'FFN' : FFN, 'CNN' : CNN, 'SNN' : SNN}

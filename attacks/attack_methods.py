@@ -6,7 +6,7 @@ from torch.autograd import Variable
 from tqdm import *
 import pickle
 import os
-from models.models import Net,FFN,CNN
+from models.models import Net,FFN,CNN,SNN
 from utils.common import generate_samples,vis_adv_org,fgsm , l_bfgs
 import random
 
@@ -18,6 +18,8 @@ class Attack(Net):
             self.Net = FFN(args,kwargs)
         elif self.model == "CNN":
             self.Net = CNN(args,kwargs)
+        elif self.model == "SNN":
+            self.Net = SNN(args,kwargs)
 
     def load_weights(self,weights=None):
         assert os.path.isfile(weights) , "Error: weight file {} is invalid, try training the model first".format(weights)
