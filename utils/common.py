@@ -135,4 +135,6 @@ def layer_indexing(g):
     # import ipdb
     # ipdb.set_trace()
     return vertex_by_layers
+
+
 methods ={'FGSM':fgsm,'L_BFGS':l_bfgs}

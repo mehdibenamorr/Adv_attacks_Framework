@@ -18,6 +18,6 @@ k = 6
 log-interval = 50
 
 #torch parameters
-no-cuda = False
+no-cuda = True
 seed = 1
 

@@ -211,7 +211,8 @@ class SNN(Net):
         plot(self.graph, layout=l)
         # Using matrix multiplactions
         self.input_layer = nn.Linear(784, len(vertex_by_layers[0]))
-        self.output_layer = nn.Linear(len(vertex_by_layers[-1]), 10)
+        self.output_layer1 = nn.Linear(len(vertex_by_layers[-1]), 10)
+        self.output_layer2 = nn.Linear(len(vertex_by_layers[-2]), 10)
         layers = []
         for i in range(1, len(vertex_by_layers)):
             layers.append(Layer([len(layer) for layer in vertex_by_layers[:i]],
@@ -239,7 +240,7 @@ class SNN(Net):
         activations.append(x)
         for layer in self.layers:
             activations.append(F.relu(layer(activations)))
-        x = F.relu(self.output_layer(activations[-1]))
+        x = (self.output_layer1(activations[-1]) + self.output_layer2(activations[-2]))
 
         return x
 
