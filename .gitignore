@@ -14,3 +14,4 @@ tests/*
 *.pyc
 *.iml
 *.txt
+gen_graph.py

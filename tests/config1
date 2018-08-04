@@ -1,23 +1,31 @@
-#Model Parameters
-model = SNN
-batch-size = 256
-test-batch-size = 256
-epochs = 100
-lr = 0.001
+[Model training Parameters]
+model = FFN
+batch-size = 128
+test-batch-size = 100
+epochs = 50
+lr = 0.01
 momentum = 0.9
 weight_decay = 1e-04
-threshold = 90
+resume = False
 
-#SNN parameters
-nodes = 150
+[SNN generation parameters]
+nodes = 250
 m = 10
 p = 0.8
 k = 6
 
-#Logging
-log-interval = 50
+[Logging]
+log-interval = 10
 
-#torch parameters
-no-cuda = True
+[torch parameters]
 seed = 1
 
+[Adversarial attack parameters]
+method = One_Pixel
+norm = l2
+max_iter = 100
+pixels = 1
+popsize = 400
+samples = 100
+targeted = False
+V = False #visulaize adversarial examples
