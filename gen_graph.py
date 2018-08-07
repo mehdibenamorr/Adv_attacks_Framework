@@ -2,46 +2,51 @@ import numpy as np
 from igraph import *
 
 import configargparse
+from torch.backends import cudnn
+
 from models.models import Net
 import torch
 import torch.nn as nn
 from torch.autograd import Variable
-import torch.optim  as optim
+import torch.optim as optim
 import torch.nn.functional as F
 from torchvision import datasets, transforms
 from utils.common import flat_trans
 from random import randint
 import matplotlib.pyplot as plt
-
+from paddll.sparse import SparsePyTorchNet
+from paddll.data.mnist import MnistDataProvider
+from paddll.graphs import *
+import itertools
 
 parser = configargparse.ArgParser()
 
 
 # Training settings
 # parser = argparse.ArgumentParser(description='Generate SNNs and train')
-parser.add('-c','--config-file', required=True, is_config_file= True,help='config file path')
-parser.add('--model', type=str, default="SNN",
-                    help='model to train (default: SNN)')
-parser.add('--batch-size', type=int, default=256,
-                    help='input batch size for training (default: 256)')
-parser.add('--test-batch-size', type=int, default=256,
-                    help='input batch size for testing (default: 256)')
+parser.add('-c','--config-file', required=False, is_config_file= True,help='config file path')
+
+parser.add('--model', type=str, default="FFN",
+                    help='model to attack (default: FFN)')
+parser.add('--batch-size', type=int, default=128,
+                    help='input batch size for training (default: 128)')
+parser.add('--test-batch-size', type=int, default=100,
+                    help='input batch size for testing (default: 100)')
 parser.add('--epochs', type=int, default=100,
                     help='number of epochs to train (default: 100)')
 parser.add('--lr', type=float, default=0.001,
                     help='learning rate (default: 0.001)')
 parser.add('--momentum', type=float, default=0.9,
                     help='SGD momentum (default: 0.9)')
-parser.add('--no-cuda', action='store_true', default=False,
-                    help='disables CUDA training')
-parser.add('--seed', type=int, default=1,
-                    help='random seed (default: 1)')
-parser.add('--log-interval', type=int, default=50,
-                    help='how many batches to wait before logging training status')
 parser.add('--weight_decay', type=float, default=1e-04,
                     help='weigth_decay rate')
+parser.add('--seed', type=int, default=1,
+                    help='random seed (default: 1)')
+parser.add('--resume', '-r', action='store_true', help='resume training from checkpoint')
+parser.add('--log-interval', type=int, default=50,
+                    help='how many batches to wait before logging training status')
 parser.add('--nodes', type=int, default=350,
-                    help='number of nodes (default: 10)')
+                    help='number of nodes for SNN training (default: 10)')
 parser.add('--m', type=int, default=10,
                     help='number of edges to attach a new node to existing ones (default: 3)')
 parser.add('--p', type=float, default=0.8,
@@ -49,11 +54,24 @@ parser.add('--p', type=float, default=0.8,
 parser.add('--k', type=int, default=6,
                     help='Each node is joined with its k nearest neighbors in a ring topology (default: 1)')
 
+parser.add('--method', type=str, default="FGSM",
+                    help='method to use for the adversarial attack (default: FGSM)')
+parser.add('--norm', type=str, default="l2",
+                    help='regularization norm (default: l2)')
+parser.add('--max_iter', type=int, default=100,
+                    help='maximum iter for DE algorithm (default: 100)')
+parser.add('--pixels', type=int, default=1,
+                    help='The number of pixels that can be perturbed.(default: 1)')
+parser.add('--popsize', default=400, type=int, help='The number of adverisal examples in each iteration.')
+parser.add('--samples', default=100, type=int, help='The number of image samples to attack.')
+parser.add('--targeted', action='store_true', help='Set this switch to test for targeted attacks.')
+parser.add('--V', action='store_true', default=False,
+                    help='visualize generated adversarial examples')
+
 
 args = parser.parse_args()
-import ipdb
-ipdb.set_trace()
-args.cuda = not args.no_cuda and torch.cuda.is_available()
+
+args.cuda = torch.cuda.is_available()
 
 
 torch.manual_seed(args.seed)
@@ -61,9 +79,9 @@ torch.manual_seed(args.seed)
 if args.cuda:
     torch.cuda.manual_seed(args.seed)
 
-kwargs = {'num_workers' : 1 , 'pin_memory': True} if args.cuda else {}
+kwargs = {'num_workers' : 4 , 'pin_memory': True} if args.cuda else {}
 
-# nodes = [100,200,300,400,500,600,700,800,1000]
+
 
 
 def generate_random_dag(N, k, p):
@@ -84,128 +102,46 @@ def generate_random_dag(N, k, p):
     # g.to_directed()
     return g
 
-
-def layer_indexing(g):
-    # vertices_index = [-1 for i in range(len(g.vs))]
-    # for v in g.vs:
-    #     if v.indegree() == 0:
-    #         vertices_index[v.index] = 0
-    # num_unindexed_vertices = len(g.vs)
-    unindexed_vertices = [v for v in g.vs if v.indegree()>0]
-    vertices_index = [0 if v.indegree()<1 else -1 for v in g.vs]
-    while len(unindexed_vertices) > 0 :
-        for v in unindexed_vertices:
-            in_edges = v.predecessors()
-            ind = { vertices_index[vv.index] for vv in in_edges }
-            if -1 not in ind:
-                vertices_index[v.index] = max(ind) + 1
-                unindexed_vertices.remove(v)
-            else:
-                continue
-    vertex_by_layers = [ [] for k in range(max(vertices_index)+1)]
-    for i in range(len(vertices_index)):
-        vertex_by_layers[vertices_index[i]].append(g.vs[i])
-    # import ipdb
-    # ipdb.set_trace()
-    return vertex_by_layers
+def epoch_printer(epoch, accuracy_test, epoch_error, accuracy_delta=None, accuracy_window_mean=None):
+    print('Epoch: {} Accuracy_test : {}  Loss : {}'.format(
+        epoch, accuracy_test, epoch_error))
 
 
-class Layer(nn.Module):
-    def __init__(self, in_dims, out_dim, vertices, predecessors, cuda, bias=True):
-        super(Layer,self).__init__()
-        self.in_dims = in_dims
-        self.out_dim = out_dim
-        self.predecessors = predecessors
-        self.vertices = vertices
-        self.cuda = cuda
-        weights = []
-        self.act_masks = []
-        self.w_masks = []
-        for i,pred in enumerate(self.predecessors):
-            mask = torch.zeros((out_dim, in_dims[i]))
-            if cuda:
-                mask = mask.cuda()
-            act_mask = torch.zeros(in_dims[i])
-            for j,v in enumerate(self.vertices):
-                for p in v.predecessors():
-                    if p in pred:
-                        ind = pred.index(p)
-                        mask[j, ind] = 1
-                        act_mask[ind] = 1
-            self.act_masks.append(act_mask)
-            self.w_masks.append(mask)
-            # import ipdb
-            # ipdb.set_trace()
-            weights.append(nn.Parameter(torch.normal(mean=torch.zeros(out_dim,in_dims[i]), std=0.1)))
-        self.weights = nn.ParameterList(weights)
-        if bias:
-            self.bias = nn.Parameter(torch.normal(mean=torch.zeros(out_dim), std=0.1))
-        else:
-            self.register_parameter('bias', None)
-
-    def forward(self, inputs):
-        output = torch.zeros(self.out_dim)
-        if self.cuda:
-            output = output.cuda()
-        for i, inp in enumerate(inputs):
-            output = output.add(inp.matmul(self.weights[i].mul(self.w_masks[i]).t()) + self.bias)
-        return output
-
-
-class SNN(Net):
+class JSNN(SparsePyTorchNet):
     def __init__(self, args, kwargs=None):
-        super(SNN, self).__init__(args,kwargs)
-        self.graph = generate_random_dag(args.nodes,args.k,args.p)
-        vertex_by_layers = layer_indexing(self.graph)
-        l = self.graph.layout('fr')
-        plot(self.graph, layout=l)
-        # Using matrix multiplactions
-        self.input_layer = nn.Linear(784, len(vertex_by_layers[0]))
-        self.output_layer = nn.Linear(len(vertex_by_layers[-1]),10)
-        layers = []
-        for i in range(1,len(vertex_by_layers)):
-            layers.append(Layer([len(layer) for layer in vertex_by_layers[:i]],
-                                         len(vertex_by_layers[i]),vertex_by_layers[i],vertex_by_layers[:i],self.args.cuda))
-        self.layers = nn.ModuleList(layers)
-        # import ipdb
-        # ipdb.set_trace()
-
+        super(JSNN, self).__init__(784,10,generate_random_dag(args.nodes, args.k, args.p))
+        self.build()
+        self.train_epochs = args.epochs
+        self.epoch_controller = epoch_printer
+        # self.converge_in(15, 0.03)
     def Dataloader(self):
-        # self.optimizer = optim.SGD(self.parameters(), lr=self.args.lr, momentum=self.args.momentum,
-        #                            weight_decay=self.args.weight_decay)
-        self.optimizer = optim.Adam(self.parameters())
-        mnist_transform = transforms.Compose(
-            [transforms.ToTensor(), transforms.Lambda(flat_trans)]
-        )
-        self.train_loader = torch.utils.data.DataLoader(
-            datasets.MNIST('data/FFN', train=True, download=True,
-                           transform=mnist_transform),
-            batch_size=self.args.batch_size, shuffle=True, **self.kwargs)
-        self.test_loader = torch.utils.data.DataLoader(
-            datasets.MNIST('data/FFN', train=False, transform=mnist_transform),
-            batch_size=self.args.test_batch_size, shuffle=True, **self.kwargs)
+        self.dataprovider = MnistDataProvider()
+
+    def cuda(self,device=None):
+        self._torch_model.cuda()
 
     def forward(self, x):
-        activations = []
-        x = F.relu(self.input_layer(x))
-        activations.append(x)
-        for layer in self.layers:
-            activations.append(F.relu(layer(activations)))
-        x = F.relu(self.output_layer(activations[-1]))
+        x = self.forward(x)
 
         return x
 
 
-model = SNN(args,kwargs)
-if args.cuda:
-    model.cuda()
-model.Dataloader()
-
+model = JSNN(args,kwargs)
 # import ipdb
 # ipdb.set_trace()
-for epoch in range(1, args.epochs + 1):
-    model.trainn(epoch)
-    model.test(epoch)
+# if args.cuda:
+#     model.cuda()
+#     cudnn.benchmark = True
+model.Dataloader()
+
+model.train()
+print(model.accuracy_test)
+#
+# import ipdb
+# ipdb.set_trace()
+# for epoch in range(1, args.epochs + 1):
+#     model.trainn(epoch)
+#     model.test(epoch)
 # import ipdb
 # ipdb.set_trace()
 

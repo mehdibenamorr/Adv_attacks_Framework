@@ -1,5 +1,5 @@
 [Model training Parameters]
-model = FFN
+model = SNN
 batch-size = 128
 test-batch-size = 100
 epochs = 50

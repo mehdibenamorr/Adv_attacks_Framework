@@ -3,6 +3,8 @@ import torch
 from models.models import models
 import os
 import torch.backends.cudnn as cudnn
+import sys
+import signal
 # Training settings
 parser = configargparse.ArgParser()
 parser.add('-c','--config-file', required=False, is_config_file= True,help='config file path')
@@ -24,6 +26,7 @@ parser.add('--weight_decay', type=float, default=1e-04,
 parser.add('--seed', type=int, default=1,
                     help='random seed (default: 1)')
 parser.add('--resume', '-r', action='store_true', help='resume training from checkpoint')
+parser.add('--cuda', action='store_true', help='build the model on GPU')
 parser.add('--log-interval', type=int, default=50,
                     help='how many batches to wait before logging training status')
 parser.add('--nodes', type=int, default=350,
@@ -43,11 +46,18 @@ parser.add('--max_iter', type=int, default=100,
                     help='maximum iter for DE algorithm (default: 100)')
 parser.add('--pixels', type=int, default=1,
                     help='The number of pixels that can be perturbed.(default: 1)')
+parser.add('--popsize', default=400, type=int, help='The number of adverisal examples in each iteration.')
+parser.add('--samples', default=100, type=int, help='The number of image samples to attack.')
+parser.add('--targeted', action='store_true', help='Set this switch to test for targeted attacks.')
 parser.add('--V', action='store_true', default=False,
                     help='visualize generated adversarial examples')
 
+def keyboardInterruptHandler(signal, frame):
+    print("Training has been stopped. Cleaning up...")
+    exit(0)
+
 args = parser.parse_args()
-args.cuda = torch.cuda.is_available()
+args.cuda = torch.cuda.is_available() and args.cuda
 
 
 torch.manual_seed(args.seed)
@@ -63,23 +73,32 @@ start_epoch = 0
 if args.resume:
     # Load checkpoint.
     print('==> Resuming from checkpoint..')
-    assert os.path.isfile(args.config_file+'.ckpt'), 'Error: no checkpoint found for this model'
-    checkpoint = torch.load(args.config_file+'.ckpt')
-    model = checkpoint['net']
-    best_acc = checkpoint['acc']
-    start_epoch = checkpoint['epoch']
+    if os.path.isfile(args.config_file+'.ckpt'):
+        checkpoint = torch.load(args.config_file+'.ckpt')
+        model = checkpoint['net']
+        best_acc = checkpoint['acc']
+        start_epoch = checkpoint['epoch']
+    else:
+        print('No checkpoint found for this model')
+        print('==> Building model..')
+        model = models[args.model](args, kwargs)
 else:
     print('==> Building model..')
     model = models[args.model](args,kwargs)
 
 if args.cuda:
     model.cuda()
+    import ipdb
+    ipdb.set_trace()
     model = torch.nn.DataParallel(model, device_ids=range(torch.cuda.device_count()))
     cudnn.benchmark = True
-
-
-model.module.Dataloader()
+    Net = model.module
+else:
+    Net = model
+Net.Dataloader()
+signal.signal(signal.SIGINT, keyboardInterruptHandler)
 
 for epoch in range(start_epoch, args.epochs):
-    model.module.trainn(epoch)
-    model.module.test(epoch)
+    Net.trainn(epoch)
+    Net.test(epoch)
+

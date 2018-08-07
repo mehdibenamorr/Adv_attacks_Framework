@@ -9,7 +9,8 @@ from torch.autograd import Variable
 from utils.common import flat_trans, generate_random_dag, layer_indexing
 from igraph import *
 from tensorboardX import SummaryWriter
-
+from paddll.graphs import *
+import itertools
 #Define different deep learning models to attack
 
 
@@ -32,8 +33,6 @@ class Net(nn.Module):
             if self.args.cuda:
                 data, target = data.cuda(), target.cuda()
             data, target = Variable(data), Variable(target)
-            import ipdb
-            ipdb.set_trace()
             self.optimizer.zero_grad()
             output = self(data)
             loss = self.SoftmaxWithXent(output, target)
@@ -90,14 +89,18 @@ class Net(nn.Module):
 
     def save(self):
         # TODO Get rid of this method
-        print ("Dumping weights to disk")
-        weights_dict = {}
-        for param in list(self.named_parameters()):
-            print ("Serializing Param" , param[0])
-            weights_dict[param[0]]= param[1]
-        with open("models/trained/"+self.model+"_weights.pkl", "wb") as f:
-            pickle.dump(weights_dict, f)
-        print ("Finished dumping to disk...")
+        # print ("Dumping weights to disk")
+        # weights_dict = {}
+        # for param in list(self.named_parameters()):
+        #     print ("Serializing Param" , param[0])
+        #     weights_dict[param[0]]= param[1]
+        # with open("models/trained/"+self.model+"_weights.pkl", "wb") as f:
+        #     pickle.dump(weights_dict, f)
+        # print ("Finished dumping to disk...")
+        state = {
+            'net': self,
+        }
+        torch.save(state, self.args.config_file + '.ckpt')
 
 
 class FFN(Net):
@@ -166,22 +169,22 @@ class CNN(Net):
 
 
 class Layer(nn.Module):
-    def __init__(self, in_dims, out_dim, vertices, predecessors, cuda, bias=True):
+    def __init__(self, in_dims, out_dim, vertices, predecessors, cuda):
         super(Layer,self).__init__()
         self.in_dims = in_dims
         self.out_dim = out_dim
-        self.predecessors = predecessors
-        self.vertices = vertices
+        predecessors = predecessors
+        vertices = vertices
         self.cuda = cuda
         weights = []
         self.act_masks = []
         self.w_masks = []
-        for i,pred in enumerate(self.predecessors):
-            mask = torch.zeros((out_dim, in_dims[i]))
+        for i,pred in enumerate(predecessors):
+            mask = Variable(torch.zeros((out_dim, in_dims[i])))
             if cuda:
                 mask = mask.cuda()
-            act_mask = torch.zeros(in_dims[i])
-            for j,v in enumerate(self.vertices):
+            act_mask = Variable(torch.zeros(in_dims[i]))
+            for j,v in enumerate(vertices):
                 for p in v.predecessors():
                     if p in pred:
                         ind = pred.index(p)
@@ -191,20 +194,19 @@ class Layer(nn.Module):
             self.w_masks.append(mask)
             # import ipdb
             # ipdb.set_trace()
-            weights.append(nn.Parameter(torch.normal(mean=torch.zeros(out_dim,in_dims[i]), std=0.1)))
+            weights.append(nn.Parameter(torch.normal(mean=torch.zeros(out_dim,in_dims[i]), std=torch.ones(out_dim,in_dims[i])*0.1)))
         self.weights = nn.ParameterList(weights)
-        if bias:
-            self.bias = nn.Parameter(torch.normal(mean=torch.zeros(out_dim), std=0.1))
-        else:
-            self.register_parameter('bias', None)
+        # if bias:
+        #     self.bias = nn.Parameter(torch.normal(mean=torch.zeros(out_dim), std=torch.ones(out_dim)*0.1))
+        # else:
+        #     self.register_parameter('bias', None)
 
     def forward(self, inputs):
-        output = torch.zeros(self.out_dim)
-        if self.cuda:
-            output = output.cuda()
+        
+        output = []
         for i, inp in enumerate(inputs):
-            output = output.add(inp.matmul(self.weights[i].mul(self.w_masks[i]).t()) + self.bias)
-        return output
+            output.append(inp.matmul(self.weights[i].mul(self.w_masks[i]).t()) )
+        return sum(output)
 
 
 class SNN(Net):
@@ -226,7 +228,7 @@ class SNN(Net):
 
     def Dataloader(self):
         # self.optimizer = optim.SGD(self.parameters(), lr=self.args.lr)
-        self.optimizer = optim.Adam(self.parameters(), lr=self.args.lr)
+        self.optimizer = optim.Adam(self.parameters())
         mnist_transform = transforms.Compose(
             [transforms.ToTensor(), transforms.Lambda(flat_trans)]
         )
@@ -259,4 +261,181 @@ class SNN(Net):
         #     pickle.dump(weights_dict, f)
         # print ("Finished dumping to disk...")
 
-models={'FFN' : FFN, 'CNN' : CNN, 'SNN' : SNN}
+
+class _SparseTorch(nn.Module):
+    def __init__(self, input_size, output_size, structure_graph,cuda):
+        """
+        :param input_size:
+        :type input_size int
+        :param output_size:
+        :type output_size int
+        :param structure_graph: A graph object specifying the structure of your arbitrary designed graph.
+        :type structure_graph igraph.Graph
+        """
+        super(_SparseTorch, self).__init__()
+        self._input_size = input_size
+        self._output_size = output_size
+        self._structure_graph = structure_graph
+
+        layer_index, vertices_by_layer = build_layer_index(self._structure_graph)
+        self._layer_index = layer_index
+        self._vertices_by_layer = vertices_by_layer
+
+        self._fully_input_to_sources = nn.Linear(self._input_size, len(vertices_by_layer[0]))
+
+        # Contains variables for each layer in size of number of its vertices
+        self._layers = {}
+        # Contains variables for each vertex in size of the number of its incoming connections
+        self._weights_per_vertice = {}
+        vertices_with_highway_to_output = []
+        for layer in vertices_by_layer:
+            if layer is 0:
+                pass
+            else:
+                #self._layers[layer] = nn.Parameter(torch.zeros(len(vertices_by_layer[layer])))
+                self._layers[layer] = Variable(torch.normal(
+                    mean=torch.zeros(len(vertices_by_layer[layer])),
+                    std=torch.ones(len(vertices_by_layer[layer])) * 0.1)).cuda() if cuda else Variable(torch.normal(
+                    mean=torch.zeros(len(vertices_by_layer[layer])),
+                    std=torch.ones(len(vertices_by_layer[layer])) * 0.1))
+                #self._layers[layer] = Variable(torch.zeros(len(vertices_by_layer[layer])))
+                for vertice in vertices_by_layer[layer]:
+                    incoming = self._structure_graph.es.select(_target=vertice)
+                    ordered_sources = sorted(edge.source for edge in incoming)
+                    incoming_size = len(ordered_sources)
+                    self._weights_per_vertice[vertice] = nn.Parameter(torch.normal(
+                        mean=torch.zeros(incoming_size),
+                        std=torch.ones(incoming_size) * 0.1
+                    ))
+                    '''self._weights_per_vertice[vertice] = Variable(torch.normal(
+                        mean=torch.zeros(incoming_size),
+                        std=torch.ones(incoming_size) * 0.1))'''
+
+                    # Add to list of vertices with no outgoing edges
+                    successors = self._structure_graph.vs[vertice].successors()
+                    if len(successors) is 0:
+                        # We have no outgoing connections, so this vertice should be connected to last FF layer
+                        vertices_with_highway_to_output.append(vertice)
+
+        last_hidden_layer_index = max(layer_index.values())
+        vertices_to_fully_layer = [vertice for vertice in vertices_by_layer[last_hidden_layer_index]]
+        vertices_to_fully_layer.extend(vertices_with_highway_to_output)
+        self._vertices_to_fully_layer = sorted(vertices_to_fully_layer)
+        last_layer_to_output_dim = [self._output_size, len(vertices_to_fully_layer)]
+        self._weights_to_output_layer = nn.Parameter(torch.normal(
+            mean=torch.zeros(last_layer_to_output_dim),
+            std=torch.ones(last_layer_to_output_dim) * 0.1
+        ))
+        #self._weights_to_output_layer = Variable(torch.normal(mean=torch.zeros(last_layer_to_output_dim), std=torch.ones(last_layer_to_output_dim) * 0.1))
+
+        self._param_list = nn.ParameterList([param for param in itertools.chain(
+            [self._weights_to_output_layer],
+            self._weights_per_vertice.values()
+        )])
+        self._linear_dummy = nn.Linear(len(self._vertices_to_fully_layer), self._output_size)
+
+    def forward(self, x):
+        activation = F.relu
+        #print('X:')
+        #print(x.size())
+        #print()
+        layer_index, vertices_by_layer = self._layer_index, self._vertices_by_layer
+
+        self._layers[0] = activation(self._fully_input_to_sources(x)).transpose(0, 1)
+        vertex_to_index_by_layer = {
+            0: {vertice: idx for vertice, idx in zip(vertices_by_layer[0], range(len(vertices_by_layer[0])))}
+        }
+
+        for layer in vertices_by_layer:
+            if layer is 0:
+                pass
+            else:
+                vertices_in_layer = len(vertices_by_layer[layer])
+                vertex_to_index_by_layer[layer] = {vertice: idx for vertice, idx in zip(vertices_by_layer[layer], range(vertices_in_layer))}
+
+                layer_results = []
+                for vertice, current_vertex_idx in zip(vertices_by_layer[layer], range(vertices_in_layer)):
+                    incoming = self._structure_graph.es.select(_target=vertice)
+                    collected_inputs = []
+                    ordered_sources = sorted(edge.source for edge in incoming)
+                    incoming_size = len(ordered_sources)
+                    for source in ordered_sources:
+                        source_layer = layer_index[source]
+                        source_idx = vertex_to_index_by_layer[source_layer][source]
+                        #print('source layer %s, source vertex %s [idx#%s]:\n\n %s' % (source_layer, source, source_idx, self._layers[source_layer]))
+                        #collected_inputs.append(self._layers[source_layer].index_select(0, Variable(torch.LongTensor([idx]))))
+                        #print(self._layers[source_layer].index_select(0, Variable(torch.LongTensor([idx]))))
+                        #print(self._layers[source_layer][idx])
+                        #print()
+                        propagation_value = self._layers[source_layer][source_idx].unsqueeze(0)
+                        collected_inputs.append(propagation_value)
+                    #print([x.size() for x in collected_inputs])
+                    vertex_input = torch.cat(collected_inputs)
+                    #vertex_input = torch.stack(collected_inputs, dim=1)
+                    #print('Vertex input dim: %s' % vertex_input.size())
+
+                    # activation(sum(W * x))
+                    """print()
+                    print('Vertice %s [#%s] in layer %s' % (vertice, current_vertex_idx, layer))
+                    print('-'*10)
+                    print('ordered_sources %s' % ordered_sources)
+                    print('vertex_input:')
+                    print(vertex_input.size())
+                    print('weights:')
+                    print(self._weights_per_vertice[vertice].size())"""
+                    wx = self._weights_per_vertice[vertice].view([1, incoming_size]).mm(vertex_input)
+                    vertex_result = activation(torch.sum(wx, dim=0))
+                    #print('vertex_result:')
+                    #print(vertex_result.size())
+                    layer_results.append(vertex_result)
+
+                #print()
+                self._layers[layer] = torch.stack(layer_results, 0)
+                #self._layers[layer] = torch.cat(layer_results)
+                #print('Layer %s resulted in: ' % layer)
+                #print(self._layers[layer].size())
+                #print()
+
+        collected_input = []
+        for vertice in self._vertices_to_fully_layer:
+            source_layer = layer_index[vertice]
+            if source_layer not in vertex_to_index_by_layer:
+                raise RuntimeError('Source layer was not found in indices for previous layers - structural error.')
+            idx = vertex_to_index_by_layer[source_layer][vertice]
+            #collected_input.append(self._layers[source_layer].index_select(0, Variable(torch.LongTensor([idx]))))
+            propagation_value = self._layers[source_layer][idx].unsqueeze(0)
+            collected_input.append(propagation_value)
+        input_to_fully_layer = torch.cat(collected_input)
+
+        result = input_to_fully_layer.transpose(0, 1)
+        return self._linear_dummy(result)
+
+
+class JSNN(Net):
+    def __init__(self,args,kwargs=None):
+        super(JSNN, self).__init__(args,kwargs)
+        self._torch_model = _SparseTorch(784,10,generate_random_dag(self.args.nodes, self.args.k, self.args.p),self.args.cuda)
+
+    def Dataloader(self):
+        # self.optimizer = optim.SGD(self.parameters(), lr=self.args.lr)
+        self.optimizer = optim.Adam(self._torch_model.parameters())
+        mnist_transform = transforms.Compose(
+            [transforms.ToTensor(), transforms.Lambda(flat_trans)]
+        )
+        self.train_loader = torch.utils.data.DataLoader(
+            datasets.MNIST('data/SNN', train=True, download=True,
+                           transform=mnist_transform),
+            batch_size=self.args.batch_size, shuffle=True, **self.kwargs)
+        self.test_loader = torch.utils.data.DataLoader(
+            datasets.MNIST('data/SNN', train=False, transform=mnist_transform),
+            batch_size=self.args.test_batch_size, shuffle=False, **self.kwargs)
+
+    def cuda(self, device=None):
+        self._torch_model.cuda()
+
+    def forward(self, x):
+        x = self._torch_model(x)
+
+        return x
+
+models={'FFN' : FFN, 'CNN' : CNN, 'SNN' : SNN, 'JSNN': JSNN}

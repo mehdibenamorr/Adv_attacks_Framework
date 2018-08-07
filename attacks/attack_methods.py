@@ -80,6 +80,7 @@ class FGSM(Attack):
                 y_true = Variable(y_true, requires_grad=False)
 
             # Classify x before Adv_attack
+
             y_pred = np.argmax(self(x).cpu().data.numpy()) if self.args.cuda else np.argmax(self(x).data.numpy())
 
             if y_true.data.item() != y_pred :
@@ -91,8 +92,7 @@ class FGSM(Attack):
             x_adversarial = fgsm(self,x,y_true,epsilon=0.1)
 
             # Classify after Adv_attack
-            y_pred_adversarial = np.argmax(
-                self(Variable(x_adversarial)).cpu().data.numpy()) if self.args.cuda else np.argmax(
+            y_pred_adversarial = np.argmax(self(Variable(x_adversarial)).cpu().data.numpy()) if self.args.cuda else np.argmax(
                 self(Variable(x_adversarial)).data.numpy())
 
             if self.args.cuda:
@@ -114,7 +114,7 @@ class FGSM(Attack):
             Adv_misclassification, len(y_preds_adversarial),
             100. * Adv_misclassification / len(
                 y_preds_adversarial)))
-        with open("utils/adv_examples/mnist_fgsm_" + self.model + ".pkl", "wb") as f:
+        with open("utils/adv_examples/mnist_fgsm_" + self.args.config_file + ".pkl", "wb") as f:
             adv_dta_dict = {
                 "xs": xs_clean,
                 "y_trues": y_trues_clean,
@@ -148,6 +148,7 @@ class One_Pixel(Attack):
         totalMisclassification = 0
         correct = 0
         Adv_misclassification = 0
+        success_rate = 0
         for batch_idx, (x, y_true) in enumerate(test_loader):
 
             if self.model == "CNN":
@@ -179,10 +180,6 @@ class One_Pixel(Attack):
                     success_rate = float(Adv_misclassification)/correct
 
                 if flag == 1:
-                    plt.imshow(adv_img.data.cpu().numpy().reshape(28,28), cmap='gray')
-                    plt.show()
-                    import ipdb
-                    ipdb.set_trace()
                     print("success rate : {:.4f}  ({}/{}) [(x,y) = ({},{}) and I = {}]".format(success_rate,Adv_misclassification,
                                                                                                correct,x[0],x[1],x[2]))
             if correct == self.args.samples:

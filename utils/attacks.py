@@ -13,8 +13,6 @@ def fgsm(Net ,x ,y_true ,epsilon=0.1):
     loss = Net.SoftmaxWithXent(outputs, y_true)
     loss.backward()  # to obtain gradients of x
     # Add small perturbation
-    import ipdb
-    ipdb.set_trace()
     x_grad = torch.sign(x.grad.data)
     x_adversarial = torch.clamp(x.data + epsilon * x_grad, 0, 1)
 

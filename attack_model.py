@@ -22,6 +22,7 @@ parser.add('--weight_decay', type=float, default=1e-04,
 parser.add('--seed', type=int, default=1,
                     help='random seed (default: 1)')
 parser.add('--resume', '-r', action='store_true', help='resume training from checkpoint')
+parser.add('--cuda', action='store_true', help='build the model on GPU')
 parser.add('--log-interval', type=int, default=50,
                     help='how many batches to wait before logging training status')
 parser.add('--nodes', type=int, default=200,
@@ -48,7 +49,7 @@ parser.add('--V', action='store_true', default=False,
                     help='visualize generated adversarial examples')
 
 args = parser.parse_args()
-args.cuda = torch.cuda.is_available()
+args.cuda = torch.cuda.is_available() and args.cuda
 
 torch.manual_seed(args.seed)
 
