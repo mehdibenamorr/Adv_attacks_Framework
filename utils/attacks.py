@@ -79,6 +79,7 @@ def one_pixel(img, label, net, model,target=None, pixels=1, maxiter=75, popsize=
     callback_fn = lambda x, convergence: attack_success(x ,img ,target_class ,net ,model ,targeted_attack)
 
     inits = np.zeros([popmul *len(bounds), len(bounds)])
+
     for init in inits:
         for i in range(pixels):
             init[i * 3 + 0 ]= np.random.random() * 28

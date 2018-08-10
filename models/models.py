@@ -214,8 +214,6 @@ class SNN(Net):
         super(SNN,self).__init__(args,kwargs)
         graph = generate_random_dag(args.nodes, args.k, args.p)
         vertex_by_layers = layer_indexing(graph)
-        l = graph.layout('fr')
-        plot(graph, layout=l)
         # Using matrix multiplactions
         self.input_layer = nn.Linear(784, len(vertex_by_layers[0]))
         self.output_layer1 = nn.Linear(len(vertex_by_layers[-1]), 10)
