@@ -88,11 +88,11 @@ else:
 
 if args.cuda:
     model.cuda()
-    import ipdb
-    ipdb.set_trace()
-    model = torch.nn.DataParallel(model, device_ids=range(torch.cuda.device_count()))
+    # import ipdb
+    # ipdb.set_trace()
+    # model = torch.nn.DataParallel(model, device_ids=range(torch.cuda.device_count()))
     cudnn.benchmark = True
-    Net = model.module
+    Net = model
 else:
     Net = model
 Net.Dataloader()

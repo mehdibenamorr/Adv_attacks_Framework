@@ -1,5 +1,5 @@
 [Model training Parameters]
-model = FFN
+model = SNN
 batch-size = 128
 test-batch-size = 100
 epochs = 50
@@ -10,10 +10,10 @@ resume = False
 cuda = True
 
 [SNN generation parameters]
-nodes = 250
-m = 10
-p = 0.8
-k = 6
+nodes = 300
+m = 5
+p = 0.7
+k = 3
 
 [Logging]
 log-interval = 10
@@ -30,3 +30,4 @@ popsize = 400
 samples = 100
 targeted = False
 V = False #visulaize adversarial examples
+

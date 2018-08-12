@@ -1,19 +1,19 @@
 [Model training Parameters]
-model = FFN
+model = SNN
 batch-size = 128
 test-batch-size = 100
 epochs = 50
 lr = 0.01
 momentum = 0.9
 weight_decay = 1e-04
-resume = False
+resume = True
 cuda = True
 
 [SNN generation parameters]
-nodes = 250
-m = 10
-p = 0.8
-k = 6
+nodes = 200
+m = 5
+p = 0.7
+k = 3
 
 [Logging]
 log-interval = 10

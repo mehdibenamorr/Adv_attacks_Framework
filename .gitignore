@@ -5,7 +5,7 @@ __pycache__/
 runs/
 data/*
 .utils/adv_examples/*
-tests/*
+
 
 # unnecessary files
 *.pkl

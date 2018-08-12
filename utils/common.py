@@ -84,9 +84,12 @@ def layer_indexing(g):
                 continue
     vertex_by_layers = [ [] for k in range(max(vertices_index)+1)]
     for i in range(len(vertices_index)):
-        vertex_by_layers[vertices_index[i]].append(g.vs[i])
-    # import ipdb
-    # ipdb.set_trace()
+        if g.vs[i].outdegree() == 0:
+            vertex_by_layers[-1].append(g.vs[i])
+        else:
+            vertex_by_layers[vertices_index[i]].append(g.vs[i])
+
+
     return vertex_by_layers
 
 

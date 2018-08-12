@@ -1,5 +1,5 @@
 [Model training Parameters]
-model = FFN
+model = JSNN
 batch-size = 128
 test-batch-size = 100
 epochs = 50
@@ -7,7 +7,7 @@ lr = 0.01
 momentum = 0.9
 weight_decay = 1e-04
 resume = False
-cuda = True
+cuda = False
 
 [SNN generation parameters]
 nodes = 250
