@@ -2,11 +2,12 @@
 model = SNN
 batch-size = 128
 test-batch-size = 100
-epochs = 1
+epochs = 30
 lr = 0.01
 momentum = 0.9
 weight_decay = 1e-04
 resume = False
+save = False
 cuda = True
 
 

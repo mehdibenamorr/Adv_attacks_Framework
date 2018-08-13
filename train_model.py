@@ -26,6 +26,7 @@ parser.add('--weight_decay', type=float, default=1e-04,
 parser.add('--seed', type=int, default=1,
                     help='random seed (default: 1)')
 parser.add('--resume', '-r', action='store_true', help='resume training from checkpoint')
+parser.add('--save', action='store_true', help='save checkpoints when training')
 parser.add('--cuda', action='store_true', help='build the model on GPU')
 parser.add('--log-interval', type=int, default=50,
                     help='how many batches to wait before logging training status')

@@ -72,18 +72,21 @@ class Net(nn.Module):
             test_loss, 100. * correct.data.item() / len(self.test_loader.dataset) ,correct, len(self.test_loader.dataset) ))
 
         #save checkpoint
+
         acc = 100. * correct.data.item() / len(self.test_loader.dataset)
         if acc > self.best_acc:
-            print('Saving..')
-            state = {
-                'net': self,
-                'acc': acc,
-                'epoch': epoch,
-            }
-            # if not os.path.isdir('checkpoint'):
-            #     os.mkdir('checkpoint')
-            torch.save(state, self.args.config_file+'.ckpt')
             self.best_acc = acc
+            if self.args.save:
+                print('Saving..')
+                state = {
+                    'net': self,
+                    'acc': acc,
+                    'epoch': epoch,
+                }
+                # if not os.path.isdir('checkpoint'):
+                #     os.mkdir('checkpoint')
+                torch.save(state, self.args.config_file+'.ckpt')
+
 
 
 
