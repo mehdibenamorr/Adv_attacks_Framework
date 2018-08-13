@@ -11,6 +11,7 @@ cuda = False
 
 [SNN generation parameters]
 nodes = 250
+layers = -1
 m = 10
 p = 0.8
 k = 6

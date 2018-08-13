@@ -6,11 +6,12 @@ epochs = 50
 lr = 0.01
 momentum = 0.9
 weight_decay = 1e-04
-resume = False
+resume = True
 cuda = True
 
 [SNN generation parameters]
 nodes = 300
+layers = -1
 m = 10
 p = 0.8
 k = 6

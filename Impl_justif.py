@@ -3,8 +3,11 @@ import torch
 from models.models import models
 import os
 import torch.backends.cudnn as cudnn
-import sys
+import numpy as np
 import signal
+import pandas as pd
+import time
+
 # Training settings
 parser = configargparse.ArgParser()
 parser.add('-c','--config-file', required=False, is_config_file= True,help='config file path')
@@ -61,6 +64,10 @@ def keyboardInterruptHandler(signal, frame):
 args = parser.parse_args()
 args.cuda = torch.cuda.is_available() and args.cuda
 
+path_to_results = "tests/results/Implementation_exp_100.csv"
+df = pd.read_csv(path_to_results, encoding='utf-8', index_col=0)
+
+
 
 torch.manual_seed(args.seed)
 
@@ -68,41 +75,52 @@ if args.cuda:
     torch.cuda.manual_seed(args.seed)
 
 kwargs = {'num_workers' : 4} if args.cuda else {}
-
-
-
-start_epoch = 0
-
-
-if args.resume:
-    # Load checkpoint.
-    print('==> Resuming from checkpoint..')
-    if os.path.isfile(args.config_file+'.ckpt'):
-        checkpoint = torch.load(args.config_file+'.ckpt')
-        model = checkpoint['net']
-        best_acc = checkpoint['acc']
-        start_epoch = checkpoint['epoch']
+accs = []
+times = []
+for i in range(1000):
+    start_epoch = 0
+    if args.resume:
+        # Load checkpoint.
+        print('==> Resuming from checkpoint..')
+        if os.path.isfile(args.config_file+'.ckpt'):
+            checkpoint = torch.load(args.config_file+'.ckpt')
+            model = checkpoint['net']
+            best_acc = checkpoint['acc']
+            start_epoch = checkpoint['epoch']
+        else:
+            print('No checkpoint found for this model')
+            print('==> Building model..')
+            model = models[args.model](args, kwargs)
     else:
-        print('No checkpoint found for this model')
         print('==> Building model..')
-        model = models[args.model](args, kwargs)
-else:
-    print('==> Building model..')
-    model = models[args.model](args,kwargs)
+        model = models[args.model](args,kwargs)
 
-if args.cuda:
-    model.cuda()
-    # import ipdb
-    # ipdb.set_trace()
-    # model = torch.nn.DataParallel(model, device_ids=range(torch.cuda.device_count()))
-    cudnn.benchmark = True
-    Net = model
-else:
-    Net = model
-Net.Dataloader()
-signal.signal(signal.SIGINT, keyboardInterruptHandler)
+    if args.cuda:
+        model.cuda()
+        # import ipdb
+        # ipdb.set_trace()
+        # model = torch.nn.DataParallel(model, device_ids=range(torch.cuda.device_count()))
+        cudnn.benchmark = True
+        Net = model
+    else:
+        Net = model
+    Net.Dataloader()
+    signal.signal(signal.SIGINT, keyboardInterruptHandler)
 
-for epoch in range(start_epoch, args.epochs):
-    Net.trainn(epoch)
-    Net.test(epoch)
+    # Computing elapsed time
+    start_time = time.clock()
+    for epoch in range(start_epoch, args.epochs):
+        Net.trainn(epoch)
+        Net.test(epoch)
+    elapsed_time = time.clock() - start_time
+    best_acc = Net.best_acc
+    print('Run: {} Acc : {:.3f}% Time_elapsed: {} seconds'.format(i,best_acc,elapsed_time))
+    accs.append(best_acc)
+    times.append(elapsed_time)
+
+
+df[args.model+'_acc'] = np.array(accs)
+df[args.model+'_Time'] = np.array(elapsed_time)
+
+df.to_csv(path_to_results)
 

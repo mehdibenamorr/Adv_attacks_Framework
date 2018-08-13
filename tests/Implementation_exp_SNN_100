@@ -2,22 +2,23 @@
 model = SNN
 batch-size = 128
 test-batch-size = 100
-epochs = 50
+epochs = 1
 lr = 0.01
 momentum = 0.9
 weight_decay = 1e-04
-resume = True
+resume = False
 cuda = True
 
-[SNN parameters]
-nodes = 250
-layers = -1
-m = 5
-p = 0.7
-k = 3
+
+[SNN generation parameters]
+nodes = 100
+layers = 1
+m = 10
+p = 0.8
+k = 6
 
 [Logging]
-log-interval = 10
+log-interval = 100
 
 [torch parameters]
 seed = 1

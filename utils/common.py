@@ -46,22 +46,29 @@ def vis_adv_org(x_org, x_adv,y_pred,y_adv,target=None):
 
 
 
-def generate_random_dag(N, k, p):
-
-    g = Graph.Watts_Strogatz(1,N,k,p)
-    adj_matrix = np.tril(np.array(g.get_adjacency().data))
-    g = Graph.Adjacency((adj_matrix>0).tolist())
-    g.to_directed()
-
-    # g = Graph()
-    # for x in range(200):
-    #     g.add_vertex(x)
-    # for i in range(100):
-    #     for j in range(100):
-    #         g.add_edge(i,100+j)
-    # Adj_matrix = np.tril(np.array(g.get_adjacency().data)).tolist()
-    # g = Graph.Adjacency(Adj_matrix)
-    # g.to_directed()
+def generate_random_dag(N, k, p, dense=-1):
+    if dense == 1:
+        g = Graph()
+        for x in range(N):
+            g.add_vertex(x)
+        adj_matrix = np.tril(np.array(g.get_adjacency().data))
+        g = Graph.Adjacency((adj_matrix>0).tolist())
+        g.to_directed()
+    elif dense == 2:
+        g = Graph()
+        for x in range(N):
+            g.add_vertex(x)
+        for i in range(int(N/2)):
+            for j in range(int(N/2)):
+                g.add_edge(i,int(N/2)+j)
+        adj_matrix = np.tril(np.array(g.get_adjacency().data))
+        g = Graph.Adjacency((adj_matrix>0).tolist())
+        g.to_directed()
+    else:
+        g = Graph.Watts_Strogatz(1,N,k,p)
+        adj_matrix = np.tril(np.array(g.get_adjacency().data))
+        g = Graph.Adjacency((adj_matrix>0).tolist())
+        g.to_directed()
     return g
 
 
@@ -71,8 +78,8 @@ def layer_indexing(g):
     #     if v.indegree() == 0:
     #         vertices_index[v.index] = 0
     # num_unindexed_vertices = len(g.vs)
-    unindexed_vertices = [v for v in g.vs if v.indegree()>0]
-    vertices_index = [0 if v.indegree()<1 else -1 for v in g.vs]
+    unindexed_vertices = [v for v in g.vs if v.indegree() > 0]
+    vertices_index = [0 if v.indegree() < 1 else -1 for v in g.vs]
     while len(unindexed_vertices) > 0 :
         for v in unindexed_vertices:
             in_edges = v.predecessors()
@@ -84,7 +91,7 @@ def layer_indexing(g):
                 continue
     vertex_by_layers = [ [] for k in range(max(vertices_index)+1)]
     for i in range(len(vertices_index)):
-        if g.vs[i].outdegree() == 0:
+        if g.vs[i].outdegree() < 1:
             vertex_by_layers[-1].append(g.vs[i])
         else:
             vertex_by_layers[vertices_index[i]].append(g.vs[i])

@@ -9,8 +9,10 @@ weight_decay = 1e-04
 resume = False
 cuda = True
 
+
 [SNN generation parameters]
-nodes = 250
+nodes = 100
+layers = 1
 m = 10
 p = 0.8
 k = 6

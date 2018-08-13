@@ -27,6 +27,8 @@ parser.add('--log-interval', type=int, default=50,
                     help='how many batches to wait before logging training status')
 parser.add('--nodes', type=int, default=200,
                     help='number of nodes for SNN training (default: 200)')
+parser.add('--layers', type=int, default=-1,
+                    help='a parameter for the experience between FFN and SNN (default: -1)')
 parser.add('--m', type=int, default=3,
                     help='number of edges to attach a new node to existing ones (default: 3)')
 parser.add('--p', type=float, default=0.5,

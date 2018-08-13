@@ -107,9 +107,17 @@ class FFN(Net):
 
     def __init__(self,args,kwargs):
         super(FFN,self).__init__(args,kwargs)
-        self.fc1 = nn.Linear(28 * 28, 300)
-        self.fc2 = nn.Linear(300, 100)
-        self.fc3 = nn.Linear(100, 10)
+        if self.args.layers == 1:
+            self.fc1 = nn.Linear(28*28,self.args.nodes)
+            self.fc2 = nn.Linear(self.args.nodes,10)
+        elif self.args.layers == 2:
+            self.fc1 = nn.Linear(28 * 28, int(self.args.nodes/2))
+            self.fc2 = nn.Linear(int(self.args.nodes/2), int(self.args.nodes/2))
+            self.fc3 = nn.Linear(int(self.args.nodes/2), 10)
+        else:
+            self.fc1 = nn.Linear(28 * 28, 300)
+            self.fc2 = nn.Linear(300, 100)
+            self.fc3 = nn.Linear(100, 10)
 
     def Dataloader(self):
         self.optimizer = optim.SGD(self.parameters(), lr=self.args.lr, momentum=self.args.momentum,
@@ -126,9 +134,13 @@ class FFN(Net):
             batch_size=self.args.test_batch_size, shuffle=False, **self.kwargs)
 
     def forward(self,x):
-        x = F.relu(self.fc1(x))
-        x = F.relu(self.fc2(x))
-        x = self.fc3(x)
+        if self.args.layers == 1:
+            x = F.relu(self.fc1(x))
+            x = self.fc2(x)
+        else:
+            x = F.relu(self.fc1(x))
+            x = F.relu(self.fc2(x))
+            x = self.fc3(x)
         return (x)
 
 
@@ -212,12 +224,12 @@ class Layer(nn.Module):
 class SNN(Net):
     def __init__(self,args,kwargs):
         super(SNN,self).__init__(args,kwargs)
-        graph = generate_random_dag(args.nodes, args.k, args.p)
+        graph = generate_random_dag(args.nodes, args.k, args.p, self.args.layers)
         vertex_by_layers = layer_indexing(graph)
         # Using matrix multiplactions
         self.input_layer = nn.Linear(784, len(vertex_by_layers[0]))
-        self.output_layer1 = nn.Linear(len(vertex_by_layers[-1]), 10)
-        self.output_layer2 = nn.Linear(len(vertex_by_layers[-2]), 10)
+        self.output_layer = nn.Linear(len(vertex_by_layers[-1]), 10)
+        # self.output_layer2 = nn.Linear(len(vertex_by_layers[-2]), 10)
         layers = []
         for i in range(1, len(vertex_by_layers)):
             layers.append(Layer([len(layer) for layer in vertex_by_layers[:i]],
@@ -244,7 +256,7 @@ class SNN(Net):
         activations.append(x)
         for layer in self.layers:
             activations.append(F.relu(layer(activations)))
-        x = (self.output_layer1(activations[-1]) + self.output_layer2(activations[-2]))
+        x = self.output_layer(activations[-1]) #+ self.output_layer2(activations[-2])
 
         return x
 
