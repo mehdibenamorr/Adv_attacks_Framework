@@ -78,7 +78,7 @@ if args.cuda:
 kwargs = {'num_workers' : 4} if args.cuda else {}
 accs = []
 times = []
-for i in range(1000):
+for i in range(100):
     start_epoch = 0
     if args.resume:
         # Load checkpoint.
@@ -107,7 +107,8 @@ for i in range(1000):
         Net = model
     Net.Dataloader()
     signal.signal(signal.SIGINT, keyboardInterruptHandler)
-
+    import ipdb
+    ipdb.set_trace()
     # Computing elapsed time
     start_time = time.clock()
     for epoch in range(start_epoch, args.epochs):
@@ -121,7 +122,7 @@ for i in range(1000):
 
 
 df[args.model+'_acc'] = np.array(accs)
-df[args.model+'_Time'] = np.array(elapsed_time)
+df[args.model+'_Time'] = np.array(times)
 
 df.to_csv(path_to_results)
 
