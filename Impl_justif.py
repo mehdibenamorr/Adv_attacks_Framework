@@ -83,6 +83,7 @@ for i in range(100):
     start_epoch = 0
 
     print('==> Building models..')
+    args.model = 'FFN'
     model1 = models[args.model](args,kwargs)
     args.model = 'SNN'
     model2 = models[args.model](args, kwargs)
