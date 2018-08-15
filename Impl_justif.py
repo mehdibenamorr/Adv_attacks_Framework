@@ -18,7 +18,7 @@ parser.add('--batch-size', type=int, default=128,
                     help='input batch size for training (default: 128)')
 parser.add('--test-batch-size', type=int, default=100,
                     help='input batch size for testing (default: 100)')
-parser.add('--epochs', type=int, default=100,
+parser.add('--epochs', type=int, default=15,
                     help='number of epochs to train (default: 100)')
 parser.add('--lr', type=float, default=0.001,
                     help='learning rate (default: 0.001)')
@@ -31,11 +31,11 @@ parser.add('--seed', type=int, default=1,
 parser.add('--resume', '-r', action='store_true', help='resume training from checkpoint')
 parser.add('--save', action='store_true', help='save checkpoints when training')
 parser.add('--cuda', action='store_true', help='build the model on GPU')
-parser.add('--log-interval', type=int, default=50,
+parser.add('--log-interval', type=int, default=100,
                     help='how many batches to wait before logging training status')
-parser.add('--nodes', type=int, default=350,
+parser.add('--nodes', type=int, default=200,
                     help='number of nodes for SNN training (default: 10)')
-parser.add('--layers', type=int, default=-1,
+parser.add('--layers', type=int, default=2,
                     help='a parameter for the experience between FFN and SNN (default: -1)')
 parser.add('--m', type=int, default=10,
                     help='number of edges to attach a new node to existing ones (default: 3)')
@@ -62,13 +62,12 @@ def keyboardInterruptHandler(signal, frame):
     print("Training has been stopped. Cleaning up...")
     exit(0)
 
+
 args = parser.parse_args()
 args.cuda = torch.cuda.is_available() and args.cuda
 
-path_to_results = "tests/results/Implementation_exp_100.csv"
+path_to_results = "tests/results/Implementation_exp_200.csv"
 df = pd.read_csv(path_to_results, encoding='utf-8', index_col=0)
-
-
 
 torch.manual_seed(args.seed)
 
@@ -76,53 +75,49 @@ if args.cuda:
     torch.cuda.manual_seed(args.seed)
 
 kwargs = {'num_workers' : 4} if args.cuda else {}
-accs = []
-times = []
+FFN_accs = []
+SNN_accs = []
+
+
 for i in range(100):
     start_epoch = 0
-    if args.resume:
-        # Load checkpoint.
-        print('==> Resuming from checkpoint..')
-        if os.path.isfile(args.config_file+'.ckpt'):
-            checkpoint = torch.load(args.config_file+'.ckpt')
-            model = checkpoint['net']
-            best_acc = checkpoint['acc']
-            start_epoch = checkpoint['epoch']
-        else:
-            print('No checkpoint found for this model')
-            print('==> Building model..')
-            model = models[args.model](args, kwargs)
-    else:
-        print('==> Building model..')
-        model = models[args.model](args,kwargs)
+
+    print('==> Building models..')
+    model1 = models[args.model](args,kwargs)
+    args.model = 'SNN'
+    model2 = models[args.model](args, kwargs)
 
     if args.cuda:
-        model.cuda()
+        model1.cuda()
+        model2.cuda()
         # import ipdb
         # ipdb.set_trace()
         # model = torch.nn.DataParallel(model, device_ids=range(torch.cuda.device_count()))
         cudnn.benchmark = True
-        Net = model
-    else:
-        Net = model
-    Net.Dataloader()
+
+    model1.Dataloader()
+    model2.Dataloader()
     signal.signal(signal.SIGINT, keyboardInterruptHandler)
+
+    # Computing elapsed time
+
+    for epoch in range(start_epoch, args.epochs):
+        model1.trainn(epoch)
+        model1.test(epoch)
+        model2.trainn(epoch)
+        model2.test(epoch)
+
+    FFN_acc = model1.best_acc
+    SNN_acc = model2.best_acc
+    print('Run: {} FFN_Acc : {:.3f}% SNN_Acc: {:.3f}% '.format(i,FFN_acc,SNN_acc))
+    FFN_accs.append(FFN_acc)
+    SNN_accs.append(SNN_acc)
     import ipdb
     ipdb.set_trace()
-    # Computing elapsed time
-    start_time = time.clock()
-    for epoch in range(start_epoch, args.epochs):
-        Net.trainn(epoch)
-        Net.test(epoch)
-    elapsed_time = time.clock() - start_time
-    best_acc = Net.best_acc
-    print('Run: {} Acc : {:.3f}% Time_elapsed: {} seconds'.format(i,best_acc,elapsed_time))
-    accs.append(best_acc)
-    times.append(elapsed_time)
 
+df['FFN_acc'] = np.array(FFN_accs)
+df['SNN_acc'] = np.array(SNN_accs)
 
-df[args.model+'_acc'] = np.array(accs)
-df[args.model+'_Time'] = np.array(times)
 
 df.to_csv(path_to_results)
 
