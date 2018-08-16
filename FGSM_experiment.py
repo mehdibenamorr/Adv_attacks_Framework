@@ -65,15 +65,17 @@ torch.manual_seed(args.seed)
 if args.cuda:
     torch.cuda.manual_seed(args.seed)
 
+path_to_results = "tests/results/FGSM_experiment_FFN_1Layer.csv"
 epsilons = [0.001,0.005,0.01,0.05,0.1,0.25]
 path = 'tests/'
 experiment = 'FFN_1Layer'
 attack = 'FGSM'
-toattack_models = [path+file for file in os.listdir(path) if file.startswith(experiment)]
+toattack_models = [path+file for file in os.listdir(path) if file.startswith(experiment) and not file.endswith('ckpt')]
 
 results = {}
 
 for configfile in toattack_models:
+    print(configfile)
     args.config_file = configfile
     args.nodes = int(configfile[-3:])
     attacker = attacks[attack](args)
@@ -87,5 +89,5 @@ for configfile in toattack_models:
 
     results[args.nodes] = dict
 
-import ipdb
-ipdb.set_trace()
+df = pd.DataFrame.from_dict(results, orient='index')
+df.to_csv(path_to_results)

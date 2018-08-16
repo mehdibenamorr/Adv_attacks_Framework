@@ -13,5 +13,5 @@ data/*
 *.xml
 *.pyc
 *.iml
-*.ckpt
+#*.ckpt
 gen_graph.py

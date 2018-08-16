@@ -113,11 +113,11 @@ class FGSM(Attack):
             xs_clean.append(x.data.numpy())
             y_trues_clean.append(y_true.data.numpy())
         print("Total misclassifications: ", totalMisclassification, " out of :", len(test_loader.dataset))
-        print('\nTotal misclassified adversarial examples : {} out of {}\nSuccess_Rate is {:.3f}%'.format(
+        print('\nTotal misclassified adversarial examples : {} out of {}\nSuccess_Rate is {:.3f}%  espsilon : {}'.format(
             Adv_misclassification, len(y_preds_adversarial),
             100. * Adv_misclassification / len(
-                y_preds_adversarial)))
-        with open("utils/adv_examples/FGSM_"+str(self.epsilon) + "_" + self.args.config_file + ".pkl", "wb") as f:
+                y_preds_adversarial),self.epsilon))
+        with open("utils/adv_examples/FGSM_"+str(self.epsilon) + "_" + self.args.config_file.split('/')[1] + ".pkl", "wb") as f:
             adv_dta_dict = {
                 "xs": xs_clean,
                 "y_trues": y_trues_clean,
