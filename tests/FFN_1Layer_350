@@ -2,30 +2,30 @@
 model = FFN
 batch-size = 128
 test-batch-size = 100
-epochs = 30
-lr = 0.01
+epochs = 50
+lr = 0.001
 momentum = 0.9
 weight_decay = 1e-04
 resume = False
-save = False
+save = True
 cuda = True
 
 
 [SNN generation parameters]
-nodes = 200
-layers = 2
+nodes = 350
+layers = 1
 m = 10
 p = 0.8
 k = 6
 
 [Logging]
-log-interval = 100
+log-interval = 10
 
 [torch parameters]
 seed = 1
 
 [Adversarial attack parameters]
-method = One_Pixel
+method = FGSM
 norm = l2
 max_iter = 100
 pixels = 1

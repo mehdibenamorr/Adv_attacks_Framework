@@ -2,7 +2,7 @@ from attacks.attack_methods import *
 import configargparse
 import torch
 
-# Training settings
+# Attack settings
 parser = configargparse.ArgumentParser()
 parser.add('-c','--config-file', required=False, is_config_file= True,help='config file path')
 parser.add('--model', type=str, default="FFN",
@@ -39,6 +39,8 @@ parser.add('--k', type=int, default=3,
 
 parser.add('--method', type=str, default="FGSM",
                     help='method to use for the adversarial attack (default: FGSM)')
+parser.add('--epsilon', type=float, default=0.1,
+                    help='parameter of FGSM (default: 0.1)')
 parser.add('--norm', type=str, default="l2",
                     help='regularization norm (default: l2)')
 parser.add('--max_iter', type=int, default=100,

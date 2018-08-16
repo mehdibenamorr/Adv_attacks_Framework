@@ -123,9 +123,9 @@ class FFN(Net):
             self.fc3 = nn.Linear(100, 10)
 
     def Dataloader(self):
-        # self.optimizer = optim.SGD(self.parameters(), lr=self.args.lr, momentum=self.args.momentum,
-        #                            weight_decay=self.args.weight_decay)
-        self.optimizer = optim.Adam(self.parameters())
+        self.optimizer = optim.SGD(self.parameters(), lr=self.args.lr, momentum=self.args.momentum,
+                                   weight_decay=self.args.weight_decay)
+        # self.optimizer = optim.Adam(self.parameters())
         mnist_transform = transforms.Compose(
             [transforms.ToTensor(),transforms.Normalize((0.1307,), (0.3081,)), transforms.Lambda(flat_trans)]
         )

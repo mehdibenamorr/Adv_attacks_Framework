@@ -1,0 +1,35 @@
+[Model training Parameters]
+model = FFN
+batch-size = 128
+test-batch-size = 100
+epochs = 50
+lr = 0.001
+momentum = 0.9
+weight_decay = 1e-04
+resume = False
+save = True
+cuda = True
+
+
+[SNN generation parameters]
+nodes = 200
+layers = 1
+m = 10
+p = 0.8
+k = 6
+
+[Logging]
+log-interval = 10
+
+[torch parameters]
+seed = 1
+
+[Adversarial attack parameters]
+method = FGSM
+norm = l2
+max_iter = 100
+pixels = 1
+popsize = 400
+samples = 100
+targeted = False
+V = False #visulaize adversarial examples

@@ -48,11 +48,13 @@ class Attack(Net):
 class FGSM(Attack):
     def __init__(self,args,kwargs=None):
         super(FGSM,self).__init__(args,kwargs)
-
+        self.epsilon = args.epsilon
     def forward(self, x):
         return self.Net(x)
 
-    def attack(self):
+    def attack(self,epsilon=None):
+        if epsilon is not None:
+            self.epsilon = epsilon
         test_loader = generate_samples(self.model)
         # Load Generated samples
         # with open("data/" + self.model + "/10k_samples.pkl", "rb") as f:
@@ -89,7 +91,7 @@ class FGSM(Attack):
                 continue
 
             #generate an adversarial example
-            x_adversarial = fgsm(self,x,y_true,epsilon=0.1)
+            x_adversarial = fgsm(self,x,y_true,self.epsilon)
 
             # Classify after Adv_attack
             y_pred_adversarial = np.argmax(self(Variable(x_adversarial)).cpu().data.numpy()) if self.args.cuda else np.argmax(
@@ -114,16 +116,20 @@ class FGSM(Attack):
             Adv_misclassification, len(y_preds_adversarial),
             100. * Adv_misclassification / len(
                 y_preds_adversarial)))
-        with open("utils/adv_examples/mnist_fgsm_" + self.args.config_file + ".pkl", "wb") as f:
+        with open("utils/adv_examples/FGSM_"+str(self.epsilon) + "_" + self.args.config_file + ".pkl", "wb") as f:
             adv_dta_dict = {
                 "xs": xs_clean,
                 "y_trues": y_trues_clean,
                 "y_preds": y_preds,
                 "noised": noises,
-                "y_preds_adversarial": y_preds_adversarial
+                "y_preds_adversarial": y_preds_adversarial,
+                "epsilon" : self.epsilon,
+                "Sucess_Rate": 100. * Adv_misclassification / len(y_preds_adversarial),
+                "model_acc" : self.Net.best_acc
             }
             pickle.dump(adv_dta_dict, f)
 
+        return adv_dta_dict
 
 class One_Pixel(Attack):
     def __init__(self,args,kwargs=None):

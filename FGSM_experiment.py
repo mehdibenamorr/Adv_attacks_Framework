@@ -1,14 +1,14 @@
+from attacks.attack_methods import *
 import configargparse
 import torch
-from models.models import models
 import os
-import torch.backends.cudnn as cudnn
-import sys
-import signal
-# Training settings
-parser = configargparse.ArgParser()
-parser.add('-c','--config-file', required=False, is_config_file= True,help='config file path')
+import pandas as pd
+import numpy as np
 
+
+# Attack settings
+parser = configargparse.ArgumentParser()
+parser.add('-c','--config-file', required=False, is_config_file= True,help='config file path')
 parser.add('--model', type=str, default="FFN",
                     help='model to attack (default: FFN)')
 parser.add('--batch-size', type=int, default=128,
@@ -30,16 +30,16 @@ parser.add('--save', action='store_true', help='save checkpoints when training')
 parser.add('--cuda', action='store_true', help='build the model on GPU')
 parser.add('--log-interval', type=int, default=50,
                     help='how many batches to wait before logging training status')
-parser.add('--nodes', type=int, default=350,
-                    help='number of nodes for SNN training (default: 10)')
+parser.add('--nodes', type=int, default=200,
+                    help='number of nodes for SNN training (default: 200)')
 parser.add('--layers', type=int, default=-1,
                     help='a parameter for the experience between FFN and SNN (default: -1)')
-parser.add('--m', type=int, default=10,
+parser.add('--m', type=int, default=3,
                     help='number of edges to attach a new node to existing ones (default: 3)')
-parser.add('--p', type=float, default=0.8,
+parser.add('--p', type=float, default=0.5,
                     help='probability for edge creation (default: 0.5)')
-parser.add('--k', type=int, default=6,
-                    help='Each node is joined with its k nearest neighbors in a ring topology (default: 1)')
+parser.add('--k', type=int, default=3,
+                    help='Each node is joined with its k nearest neighbors in a ring topology (default: 3)')
 
 parser.add('--method', type=str, default="FGSM",
                     help='method to use for the adversarial attack (default: FGSM)')
@@ -57,55 +57,35 @@ parser.add('--targeted', action='store_true', help='Set this switch to test for 
 parser.add('--V', action='store_true', default=False,
                     help='visualize generated adversarial examples')
 
-def keyboardInterruptHandler(signal, frame):
-    print("Training has been stopped. Cleaning up...")
-    exit(0)
-
 args = parser.parse_args()
 args.cuda = torch.cuda.is_available() and args.cuda
-
 
 torch.manual_seed(args.seed)
 
 if args.cuda:
     torch.cuda.manual_seed(args.seed)
 
-kwargs = {'num_workers' : 4} if args.cuda else {}
+epsilons = [0.001,0.005,0.01,0.05,0.1,0.25]
+path = 'tests/'
+experiment = 'FFN_1Layer'
+attack = 'FGSM'
+toattack_models = [path+file for file in os.listdir(path) if file.startswith(experiment)]
 
+results = {}
 
+for configfile in toattack_models:
+    args.config_file = configfile
+    args.nodes = int(configfile[-3:])
+    attacker = attacks[attack](args)
+    if args.cuda:
+        attacker.cuda()
+    dict = {'Acc' : attacker.Net.best_acc}
 
-start_epoch = 0
+    for epsilon in epsilons:
+        dta = attacker.attack(epsilon)
+        dict['eps='+str(epsilon)] = dta['Sucess_Rate']
 
+    results[args.nodes] = dict
 
-if args.resume:
-    # Load checkpoint.
-    print('==> Resuming from checkpoint..')
-    if os.path.isfile(args.config_file+'.ckpt'):
-        checkpoint = torch.load(args.config_file+'.ckpt')
-        model = checkpoint['net']
-        best_acc = checkpoint['acc']
-        start_epoch = checkpoint['epoch']
-    else:
-        print('No checkpoint found for this model')
-        print('==> Building model..')
-        model = models[args.model](args, kwargs)
-else:
-    print('==> Building model..')
-    model = models[args.model](args,kwargs)
-
-if args.cuda:
-    model.cuda()
-    # import ipdb
-    # ipdb.set_trace()
-    # model = torch.nn.DataParallel(model, device_ids=range(torch.cuda.device_count()))
-    cudnn.benchmark = True
-    Net = model
-else:
-    Net = model
-Net.Dataloader()
-signal.signal(signal.SIGINT, keyboardInterruptHandler)
-
-for epoch in range(start_epoch, args.epochs):
-    Net.trainn(epoch)
-    Net.test(epoch)
-
+import ipdb
+ipdb.set_trace()
