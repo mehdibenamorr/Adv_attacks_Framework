@@ -23,6 +23,7 @@ class Attack(Net):
         # elif self.model == "SNN":
         #     self.Net = SNN(args,kwargs)
         self.Net = self.load_model(self.args.config_file+'.ckpt')
+        self.best_acc = self.Net.best_acc
         if args.cuda:
             self.Net.cuda()
             cudnn.benchmark = True
@@ -125,7 +126,7 @@ class FGSM(Attack):
                 "y_preds_adversarial": y_preds_adversarial,
                 "epsilon" : self.epsilon,
                 "Sucess_Rate": 100. * Adv_misclassification / len(y_preds_adversarial),
-                "model_acc" : self.Net.best_acc
+                "model_acc" : self.best_acc
             }
             pickle.dump(adv_dta_dict, f)
 

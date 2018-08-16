@@ -79,7 +79,7 @@ for configfile in toattack_models:
     attacker = attacks[attack](args)
     if args.cuda:
         attacker.cuda()
-    dict = {'Acc' : attacker.Net.best_acc}
+    dict = {'Acc' : attacker.best_acc}
 
     for epsilon in epsilons:
         dta = attacker.attack(epsilon)
