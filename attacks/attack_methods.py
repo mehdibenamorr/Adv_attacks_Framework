@@ -14,15 +14,12 @@ import random
 import matplotlib.pyplot as plt
 
 class Attack(Net):
-    def __init__(self,args,kwargs=None):
+    def __init__(self,args,kwargs=None,Net=None):
         super(Attack,self).__init__(args,kwargs)
-        # if self.model == "FFN":
-        #     self.Net = FFN(args,kwargs)
-        # elif self.model == "CNN":
-        #     self.Net = CNN(args,kwargs)
-        # elif self.model == "SNN":
-        #     self.Net = SNN(args,kwargs)
-        self.Net = self.load_model(self.args.config_file+'.ckpt')
+        if Net is not None:
+            self.Net = Net
+        else:
+            self.Net = self.load_model(self.args.config_file+'.ckpt')
         self.best_acc = self.Net.best_acc
         if args.cuda:
             self.Net.cuda()
@@ -47,8 +44,8 @@ class Attack(Net):
 
 
 class FGSM(Attack):
-    def __init__(self,args,kwargs=None):
-        super(FGSM,self).__init__(args,kwargs)
+    def __init__(self,args,kwargs=None,Net=None):
+        super(FGSM,self).__init__(args,kwargs,Net)
         self.epsilon = args.epsilon
     def forward(self, x):
         return self.Net(x)
@@ -117,17 +114,17 @@ class FGSM(Attack):
             Adv_misclassification, len(y_preds_adversarial),
             100. * Adv_misclassification / len(
                 y_preds_adversarial),self.epsilon))
+        adv_dta_dict = {
+            "xs": xs_clean,
+            "y_trues": y_trues_clean,
+            "y_preds": y_preds,
+            "noised": noises,
+            "y_preds_adversarial": y_preds_adversarial,
+            "epsilon": self.epsilon,
+            "Sucess_Rate": 100. * Adv_misclassification / len(y_preds_adversarial),
+            "model_acc": self.best_acc
+        }
         with open("utils/adv_examples/FGSM_"+str(self.epsilon) + "_" + self.args.config_file.split('/')[1] + ".pkl", "wb") as f:
-            adv_dta_dict = {
-                "xs": xs_clean,
-                "y_trues": y_trues_clean,
-                "y_preds": y_preds,
-                "noised": noises,
-                "y_preds_adversarial": y_preds_adversarial,
-                "epsilon" : self.epsilon,
-                "Sucess_Rate": 100. * Adv_misclassification / len(y_preds_adversarial),
-                "model_acc" : self.best_acc
-            }
             pickle.dump(adv_dta_dict, f)
 
         return adv_dta_dict

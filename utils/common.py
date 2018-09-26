@@ -13,8 +13,8 @@ def flat_trans(x):
     return x
 
 def generate_samples(model):
-
-    mnist_transform = transforms.Compose([ transforms.ToTensor(),transforms.Normalize((0.1307,), (0.3081,)),transforms.Lambda(flat_trans)]) if model != "CNN" else \
+    #,transforms.Normalize((0.1307,), (0.3081,))
+    mnist_transform = transforms.Compose([ transforms.ToTensor(),transforms.Lambda(flat_trans)]) if model != "CNN" else \
         transforms.Compose([transforms.ToTensor(), transforms.Normalize((0.1307,), (0.3081,))])
     test_loader = torch.utils.data.DataLoader(
         datasets.MNIST('data/'+model, train=False, transform=mnist_transform),

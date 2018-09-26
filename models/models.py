@@ -23,6 +23,7 @@ class Net(nn.Module):
         # self.writer = SummaryWriter(comment=args.model + '_training_epochs_' + str(args.epochs) + '_lr_' + str(args.lr))
         self.SoftmaxWithXent = nn.CrossEntropyLoss()
         self.best_acc = 0
+        self.best_state = {}
 
     def trainn(self,epoch):
         self.train()
@@ -76,6 +77,7 @@ class Net(nn.Module):
         acc = 100. * correct.data.item() / len(self.test_loader.dataset)
         if acc > self.best_acc:
             self.best_acc = acc
+            self.best_state = {'model': self}
             if self.args.save:
                 print('Saving..')
                 state = {
