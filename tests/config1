@@ -19,7 +19,7 @@ cuda = True
 
 
 [Experiment]
-experiment = SNN_experiment
+experiment = SNN_experiment_FGSM_0.1
 path = tests/results/
 [Logging]
 log-interval = 100

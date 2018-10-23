@@ -85,7 +85,7 @@ class Experiment(object):
         self.ks = [3,4,5,6,8,10,]
         self.ps = [0.5,0.6,0.7,0.8]
         self.N = 10  # number of repetitions
-        self.params = range(69500,89500)  #79500 range of parameters for SNNs generation
+        self.params = range(69500,89500)  #range of parameters for SNNs generation
         self.nb_SNNs = 10
         self.Trained_models={}
         self.Results = {}
@@ -96,56 +96,59 @@ class Experiment(object):
             # import ipdb
             # ipdb.set_trace()
             for n in self.nodes:
-                self.Trained_models[self.experiment + "_" + str(n)] = []
+                # self.Trained_models[self.experiment + "_" + str(n)] = []
                 self.args.nodes = n
-                for i in range(5):
-                    print('==> Building model..' + self.args.experiment + "_" + str(n) + "_" + str(i))
-                    model = models[args.model](self.args, self.kwargs)
-                    if self.args.cuda:
-                        model.cuda()
-                        cudnn.benchmark = True
+                # for i in range(self.N):
+                print('==> Building model..' + self.args.experiment + "_" + str(n) )
+                model = models[args.model](self.args, self.kwargs)
+                if self.args.cuda:
+                    model.cuda()
+                    cudnn.benchmark = True
 
-                    model.Dataloader()
-                    for epoch in range(self.args.epochs):
-                        model.trainn(epoch)
-                        model.test(epoch)
-                    self.Trained_models[self.args.experiment + "_" + str(n)].append(model.best_state)
+                model.Dataloader()
+                for epoch in range(self.args.epochs):
+                    model.trainn(epoch)
+                    model.test(epoch)
+                self.Trained_models[self.args.experiment + "_" + str(n)] = model.best_state
+            torch.save(self.Trained_models, self.args.path + "Trained_FFNs.pkl")
         elif self.args.model == 'SNN':
             #generate SNNs with parameters in range of (79500,89500) parameters
             #TODO save generated graph structures
             SNNs , graphs = generate_SNNs(self.params, self.args, self.kwargs, self.nb_SNNs, self.nodes[2:], self.ks,self.ps)
             for snn in SNNs:
-                self.Trained_models[self.experiment + "_" + str(snn.count_parameters()) + "_" + str(snn.args.nodes) + "_" + str(snn.args.k) + "_" + str(snn.args.p)] = []
-                for i in range(self.N):
-                    print("==> Training model.." + self.args.experiment + "_" + str(snn.count_parameters()) + "_" + str(snn.args.nodes)
-                          + "_" + str(snn.args.k) + "_" + str(snn.args.p)+"_"+str(i))
-                    if self.args.cuda:
-                        snn.cuda()
-                        cudnn.benchmark = True
-                    snn.Dataloader()
-                    for epoch in range(self.args.epochs):
-                        snn.trainn(epoch)
-                        snn.test(epoch)
-                    self.Trained_models[self.experiment + "_" + str(snn.count_parameters()) + "_" + str(snn.args.nodes) + "_" + str(snn.args.k) + "_" + str(snn.args.p)].append(snn.best_state)
+                # self.Trained_models[self.experiment + "_" + str(snn.count_parameters()) + "_" + str(snn.args.nodes) + "_" + str(snn.args.k) + "_" + str(snn.args.p)] = []
+                # for i in range(self.N):
+                print("==> Training model.." + self.args.experiment + "_" + str(snn.count_parameters()) + "_" + str(snn.args.nodes)
+                      + "_" + str(snn.args.k) + "_" + str(snn.args.p))
+                if self.args.cuda:
+                    snn.cuda()
+                    cudnn.benchmark = True
+                snn.Dataloader()
+                for epoch in range(self.args.epochs):
+                    snn.trainn(epoch)
+                    snn.test(epoch)
+                self.Trained_models[self.experiment + "_" + str(snn.count_parameters()) + "_" + str(snn.args.nodes) + "_" + str(snn.args.k) + "_" + str(snn.args.p)]=snn.best_state
             # save generated and trained models and TODO graphs
-            torch.save(SNNs, self.args.path + "Generated_SNNS.pkl")
-            torch.save(self.Trained_models , self.args.path + "Trained_SNNs.pkl")
+            torch.save(SNNs, self.args.path + "Generated_SNNS_graphs.pkl")
+            torch.save(self.Trained_models , self.args.path + "Trained_SNNs_normal_init.pkl")
 
 
     def attack(self):
         # Attack all trained models and store the results
         self.Results = {}
         for model in self.Trained_models.keys():
-            self.Results[model] = {'Robustness': [], 'Accuracy': [],
-                                   '#params': self.Trained_models[model][0]['#params'] }
-            for rep in self.Trained_models[model]:
-                net = rep['model']
-                self.Results[model]['Accuracy'].append(net.best_acc)
-                attacker = attacks[self.attack](self.args, Net=net)
-                if self.args.cuda:
-                    attacker.cuda()
-                dta = attacker.attack()
-                self.Results[model]['Robustness'].append(dta['Success_Rate'])
+            self.Results[model] = {'Robustness': dta['Success_Rate'], 'Accuracy': net.best_acc,
+                                   '#params': self.Trained_models[model]['#params']}
+            # for rep in self.Trained_models[model]:
+            net = self.Trained_models[model]['model']
+            # self.Results[model]['Accuracy'].append(net.best_acc)
+            attacker = attacks[self.attack](self.args, Net=net)
+            if self.args.cuda:
+                attacker.cuda()
+            dta = attacker.attack()
+            # self.Results[model]['Robustness'].append(dta['Success_Rate'])
+            self.Results[model] = {'Robustness': dta['Success_Rate'], 'Accuracy': net.best_acc,
+                                   '#params': self.Trained_models[model]['#params']}
 
         df = pd.DataFrame.from_dict(self.Results, orient='index')
         df.to_csv(self.args.path_to_results)

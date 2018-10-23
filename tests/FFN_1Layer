@@ -14,6 +14,9 @@ resume = False
 save = False
 cuda = True
 
+[Experiment]
+experiment = FFN1L_experiment_FGSM_0.1
+path = tests/results/
 
 [Logging]
 log-interval = 100
