@@ -256,7 +256,7 @@ class SNN(Net):
         # self.optimizer = optim.SGD(self.parameters(), lr=self.args.lr)
         self.optimizer = optim.Adam(self.parameters())
         mnist_transform = transforms.Compose(
-            [transforms.ToTensor(), transforms.Lambda(flat_trans)]
+            [transforms.ToTensor(), transforms.Normalize((0.1307,), (0.3081,)),transforms.Lambda(flat_trans)]
         )
         self.train_loader = torch.utils.data.DataLoader(
             datasets.MNIST('data/SNN', train=True, download=True,
