@@ -1,34 +1,33 @@
+[Model parameters]
+model = SNN
+nodes = 200
+k = 3
+p = 0.7
+layers = -1
+
+
 [Model training Parameters]
-model = FFN
 batch-size = 128
 test-batch-size = 100
-epochs = 50
-lr = 0.01
+epochs = 20
+lr = 0.001
 momentum = 0.9
 weight_decay = 1e-04
 resume = False
+save = False
 cuda = True
 
 
-[SNN generation parameters]
-nodes = 100
-layers = 1
-m = 10
-p = 0.8
-k = 6
-
+[Experiment]
+experiment = SNN_experiment
+path = tests/results/
 [Logging]
-log-interval = 10
+log-interval = 100
 
 [torch parameters]
 seed = 1
 
 [Adversarial attack parameters]
-method = One_Pixel
-norm = l2
-max_iter = 100
-pixels = 1
-popsize = 400
-samples = 100
-targeted = False
+method = FGSM
+epsilon= 0.1
 V = False #visulaize adversarial examples

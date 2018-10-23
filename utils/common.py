@@ -5,7 +5,7 @@ import pickle
 import matplotlib.pyplot as plt
 import numpy as np
 from igraph import *
-from utils.differential_evolution import differential_evolution
+# from models.models import SNN  #TODO fix this import issue
 
 def flat_trans(x):
     x.resize_(28*28)
@@ -99,4 +99,34 @@ def layer_indexing(g):
 
     return vertex_by_layers
 
+
+def generate_SNNs(params_range, args, kwargs, nb=10, nodes=None, ks=None, ps=None):
+    from models.models import SNN
+    print("==> Generating SNNs with #paramerters in " + str(params_range))
+    nb_SNNs = 0
+    SNNs = []
+    graph_structures = []
+    while nb_SNNs < nb:
+        if (nodes is not None) and (ks is not None) and (ps is not None):
+            for node in nodes:
+                for k in ks:
+                    for p in ps:
+                        snn = SNN(args,kwargs,node,k,p)
+                        print("nodes:",str(node),"k: ",str(k),"p: ",str(p), "#params: ", str(snn.count_parameters()))
+                        if snn.count_parameters() in params_range:
+                            SNNs.append(snn)
+                            graph_structures.append(snn.structure_graph())
+                            print("saved")
+                            nb_SNNs+=1
+                            if nb_SNNs == nb:
+                                return SNNs, graph_structures
+        else:
+            snn = SNN(args,kwargs)
+            print("nodes:", str(args.nodes), "k: ", str(args.k), "p: ", str(args.p), "#params: ", str(snn.count_parameters()))
+            if snn.count_parameters() in params_range:
+                SNNs.append(snn)
+                graph_structures.append(snn.structure_graph())
+                print("saved")
+                nb_SNNs += 1
+    return SNNs, graph_structures
 

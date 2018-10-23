@@ -15,7 +15,7 @@ plt.show()
 
 
 #FGSM 1Layer experiment
-path_to_results = "tests/results/FGSM_experiment_FFN_1Layer.csv"
-df = pd.read_csv(path_to_results, index_col=0)
+path_to_results = "tests/results/experiment_FFN_1Layer.csv"
+df1 = pd.read_csv(path_to_results, index_col=0)
 import ipdb
 ipdb.set_trace()

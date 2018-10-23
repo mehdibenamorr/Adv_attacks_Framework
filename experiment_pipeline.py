@@ -3,6 +3,7 @@ import configargparse
 import torch
 import torch.backends.cudnn as cudnn
 from models.models import models
+from utils.common import generate_SNNs
 import os
 import pandas as pd
 import numpy as np
@@ -26,6 +27,10 @@ parser.add('--weight_decay', type=float, default=1e-04,
                     help='weigth_decay rate')
 parser.add('--seed', type=int, default=1,
                     help='random seed (default: 1)')
+parser.add('--experiment', type=str, default="SNN_experiment",
+                    help='the name of the experiment (default: sNN_experiment)')
+parser.add('--path', type=str, default="tests/results/",
+                    help='path to save the results (default: tests/results/)')
 parser.add('--resume', '-r', action='store_true', help='resume training from checkpoint')
 parser.add('--save', action='store_true', help='save checkpoints when training')
 parser.add('--cuda', action='store_true', help='build the model on GPU')
@@ -68,46 +73,85 @@ if args.cuda:
     torch.cuda.manual_seed(args.seed)
 
 
-# Experiment setting
-experiment = 'FFN_1Layer'
-attack = 'FGSM'
-path_to_results = "tests/results/experiment_FFN_1Layer.csv"
-nodes = [50,100,150,200,250,300,350,400]
-N = 10  # number of repetitions
+class Experiment(object):
+    def __init__(self,args,kwargs, experiment, attack, path):
+        # Experiment setting
+        self.args = args
+        self.kwargs = kwargs
+        self.experiment = experiment
+        self.attack = attack
+        self.path_to_results = path + experiment + ".csv"
+        self.nodes = [50, 100, 150, 200, 250, 300, 350, 400]  # for FFN experiment
+        self.ks = [3,4,5,6,8,10,]
+        self.ps = [0.5,0.6,0.7,0.8]
+        self.N = 10  # number of repetitions
+        self.params = range(69500,89500)  #79500 range of parameters for SNNs generation
+        self.nb_SNNs = 10
+        self.Trained_models={}
+        self.Results = {}
+
+    def train(self):
+        if self.args.model == 'FFN':
+            # Train All the models and store them temporarily
+            # import ipdb
+            # ipdb.set_trace()
+            for n in self.nodes:
+                self.Trained_models[self.experiment + "_" + str(n)] = []
+                self.args.nodes = n
+                for i in range(5):
+                    print('==> Building model..' + self.args.experiment + "_" + str(n) + "_" + str(i))
+                    model = models[args.model](self.args, self.kwargs)
+                    if self.args.cuda:
+                        model.cuda()
+                        cudnn.benchmark = True
+
+                    model.Dataloader()
+                    for epoch in range(self.args.epochs):
+                        model.trainn(epoch)
+                        model.test(epoch)
+                    self.Trained_models[self.args.experiment + "_" + str(n)].append(model.best_state)
+        elif self.args.model == 'SNN':
+            #generate SNNs with parameters in range of (79500,89500) parameters
+            #TODO save generated graph structures
+            SNNs , graphs = generate_SNNs(self.params, self.args, self.kwargs, self.nb_SNNs, self.nodes[2:], self.ks,self.ps)
+            for snn in SNNs:
+                self.Trained_models[self.experiment + "_" + str(snn.count_parameters()) + "_" + str(snn.args.nodes) + "_" + str(snn.args.k) + "_" + str(snn.args.p)] = []
+                for i in range(self.N):
+                    print("==> Training model.." + self.args.experiment + "_" + str(snn.count_parameters()) + "_" + str(snn.args.nodes)
+                          + "_" + str(snn.args.k) + "_" + str(snn.args.p)+"_"+str(i))
+                    if self.args.cuda:
+                        snn.cuda()
+                        cudnn.benchmark = True
+                    snn.Dataloader()
+                    for epoch in range(self.args.epochs):
+                        snn.trainn(epoch)
+                        snn.test(epoch)
+                    self.Trained_models[self.experiment + "_" + str(snn.count_parameters()) + "_" + str(snn.args.nodes) + "_" + str(snn.args.k) + "_" + str(snn.args.p)].append(snn.best_state)
+            # save generated and trained models and TODO graphs
+            torch.save(SNNs, self.args.path + "Generated_SNNS.pkl")
+            torch.save(self.Trained_models , self.args.path + "Trained_SNNs.pkl")
 
 
-# Train All the models and store them temporarily
-Trained_models = {}
-for n in nodes:
-    Trained_models[experiment + "_" + str(n)] = []
-    args.nodes = n
-    for i in range(N):
-        print('==> Building model..' + experiment + "_" + str(n) + "_" + str(i))
-        model = models[args.model](args, kwargs)
-        if args.cuda:
-            model.cuda()
-            cudnn.benchmark = True
+    def attack(self):
+        # Attack all trained models and store the results
+        self.Results = {}
+        for model in self.Trained_models.keys():
+            self.Results[model] = {'Robustness': [], 'Accuracy': [],
+                                   '#params': self.Trained_models[model][0]['#params'] }
+            for rep in self.Trained_models[model]:
+                net = rep['model']
+                self.Results[model]['Accuracy'].append(net.best_acc)
+                attacker = attacks[self.attack](self.args, Net=net)
+                if self.args.cuda:
+                    attacker.cuda()
+                dta = attacker.attack()
+                self.Results[model]['Robustness'].append(dta['Success_Rate'])
 
-        model.Dataloader()
-        for epoch in range(args.epochs):
-            model.trainn(epoch)
-            model.test(epoch)
-        Trained_models[experiment + "_" + str(n)].append(model.best_state)
-# import ipdb
-# ipdb.set_trace()
+        df = pd.DataFrame.from_dict(self.Results, orient='index')
+        df.to_csv(self.args.path_to_results)
+        return df
 
-# Attack all trained models and store the results
-Results = {}
-for model in Trained_models.keys():
-    Results[model] = {'Robustness': [], 'Accuracy': []}
-    for rep in Trained_models[model]:
-        net = rep['model']
-        Results[model]['Accuracy'].append(net.best_acc)
-        attacker = attacks[attack](args, Net=net)
-        if args.cuda:
-            attacker.cuda()
-        dta = attacker.attack()
-        Results[model]['Robustness'].append(dta['Sucess_Rate'])
 
-df = pd.DataFrame.from_dict(Results, orient='index')
-df.to_csv(path_to_results)
+exp = Experiment(args,kwargs, args.experiment, args.method, args.path)
+exp.train()
+results = exp.attack()

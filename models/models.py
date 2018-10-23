@@ -25,6 +25,9 @@ class Net(nn.Module):
         self.best_acc = 0
         self.best_state = {}
 
+    def count_parameters(self):
+        return sum(p.numel() for p in self.parameters() if p.requires_grad)
+
     def trainn(self,epoch):
         self.train()
         train_loss = 0
@@ -77,7 +80,7 @@ class Net(nn.Module):
         acc = 100. * correct.data.item() / len(self.test_loader.dataset)
         if acc > self.best_acc:
             self.best_acc = acc
-            self.best_state = {'model': self}
+            self.best_state = {'model': self, '#params' : self.count_parameters()}
             if self.args.save:
                 print('Saving..')
                 state = {
@@ -187,7 +190,7 @@ class CNN(Net):
 
 
 class Layer(nn.Module):
-    def __init__(self, in_dims, out_dim, vertices, predecessors, cuda):
+    def __init__(self, in_dims, out_dim, vertices, predecessors, cuda, bias=True):
         super(Layer,self).__init__()
         self.in_dims = in_dims
         self.out_dim = out_dim
@@ -214,10 +217,10 @@ class Layer(nn.Module):
             # ipdb.set_trace()
             weights.append(nn.Parameter(torch.normal(mean=torch.zeros(out_dim,in_dims[i]), std=torch.ones(out_dim,in_dims[i])*0.1)))
         self.weights = nn.ParameterList(weights)
-        # if bias:
-        #     self.bias = nn.Parameter(torch.normal(mean=torch.zeros(out_dim), std=torch.ones(out_dim)*0.1))
-        # else:
-        #     self.register_parameter('bias', None)
+        if bias:
+            self.bias = nn.Parameter(torch.normal(mean=torch.zeros(out_dim), std=torch.ones(out_dim)*0.1))
+        else:
+            self.register_parameter('bias', None)
 
     def forward(self, inputs):
         
@@ -228,11 +231,18 @@ class Layer(nn.Module):
 
 
 class SNN(Net):
-    def __init__(self,args,kwargs):
+    def __init__(self,args,kwargs, nodes=None, k=None, p=None):
         super(SNN,self).__init__(args,kwargs)
-        graph = generate_random_dag(args.nodes, args.k, args.p, self.args.layers)
+        if (nodes is not None) and (k is not None) and (p is not None):
+            graph = generate_random_dag(nodes, k, p, self.args.layers)
+            self.args.nodes=nodes
+            self.args.k=k
+            self.args.p=p
+        else:
+            graph = generate_random_dag(self.args.nodes, self.args.k, self.args.p, self.args.layers)
+        self._stucture_graph = graph
         vertex_by_layers = layer_indexing(graph)
-        # Using matrix multiplactions
+        # Using matrix multiplications
         self.input_layer = nn.Linear(784, len(vertex_by_layers[0]))
         self.output_layer = nn.Linear(len(vertex_by_layers[-1]), 10)
         # self.output_layer2 = nn.Linear(len(vertex_by_layers[-2]), 10)
@@ -266,7 +276,11 @@ class SNN(Net):
 
         return x
 
+    def structure_graph(self):
+        return self._stucture_graph
+
     def save(self):
+        del self._stucture_graph
         torch.save(self.state_dict(), "tests/"+self.model+"_"+self.args.config_file.split('/')[1]+".pt")
         # print ("Dumping weights to disk")
         # weights_dict = {}

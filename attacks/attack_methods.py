@@ -121,7 +121,7 @@ class FGSM(Attack):
             "noised": noises,
             "y_preds_adversarial": y_preds_adversarial,
             "epsilon": self.epsilon,
-            "Sucess_Rate": 100. * Adv_misclassification / len(y_preds_adversarial),
+            "Success_Rate": 100. * Adv_misclassification / len(y_preds_adversarial),
             "model_acc": self.best_acc
         }
         with open("utils/adv_examples/FGSM_"+str(self.epsilon) + "_" + self.args.config_file.split('/')[1] + ".pkl", "wb") as f:
