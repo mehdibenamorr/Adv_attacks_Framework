@@ -90,71 +90,93 @@ class Experiment(object):
         self.Trained_models={}
         self.Results = {}
 
-    def train(self):
-        if self.args.model == 'FFN':
-            # Train All the models and store them temporarily
+    def load_models(self,file_path):
+        if os.path.isfile(file_path):
             # import ipdb
             # ipdb.set_trace()
-            for n in self.nodes:
-                # self.Trained_models[self.experiment + "_" + str(n)] = []
-                self.args.nodes = n
-                # for i in range(self.N):
-                print('==> Building model..' + self.args.experiment + "_" + str(n) )
-                model = models[args.model](self.args, self.kwargs)
-                if self.args.cuda:
-                    model.cuda()
-                    cudnn.benchmark = True
+            self.Trained_models = torch.load(file_path)
+        else:
+            print("This file was not found %s" % file_path)
 
-                model.Dataloader()
-                for epoch in range(self.args.epochs):
-                    model.trainn(epoch)
-                    model.test(epoch)
-                self.Trained_models[self.args.experiment + "_" + str(n)] = model.best_state
-            torch.save(self.Trained_models, self.args.path + "Trained_FFNs.pkl")
+    def train_models(self):
+        if self.args.model == 'FFN':
+            if os.path.isfile(self.args.path + self.experiment +"_Trained_FFNs.pkl"):
+                self.Trained_models = torch.load(self.args.path + self.experiment +"_Trained_FFNs.pkl")
+            else:
+                # Train All the models and store them temporarily
+                # import ipdb
+                # ipdb.set_trace()
+                for n in self.nodes:
+                    # self.Trained_models[self.experiment + "_" + str(n)] = []
+                    self.args.nodes = n
+                    # for i in range(self.N):
+                    print('==> Building model..' + self.args.experiment + "_" + str(n) )
+                    model = models[args.model](self.args, self.kwargs)
+                    if self.args.cuda:
+                        model.cuda()
+                        cudnn.benchmark = True
+
+                    model.Dataloader()
+                    for epoch in range(self.args.epochs):
+                        model.trainn(epoch)
+                        model.test(epoch)
+                    self.Trained_models[self.args.experiment + "_" + str(n)] = model.best_state
+                torch.save(self.Trained_models, self.args.path + self.experiment +"_Trained_FFNs.pkl")
         elif self.args.model == 'SNN':
-            #generate SNNs with parameters in range of (79500,89500) parameters
-            #TODO save generated graph structures
-            SNNs , graphs = generate_SNNs(self.params, self.args, self.kwargs, self.nb_SNNs, self.nodes[2:], self.ks,self.ps)
-            for snn in SNNs:
-                # self.Trained_models[self.experiment + "_" + str(snn.count_parameters()) + "_" + str(snn.args.nodes) + "_" + str(snn.args.k) + "_" + str(snn.args.p)] = []
-                # for i in range(self.N):
-                print("==> Training model.." + self.args.experiment + "_" + str(snn.count_parameters()) + "_" + str(snn.args.nodes)
-                      + "_" + str(snn.args.k) + "_" + str(snn.args.p))
-                if self.args.cuda:
-                    snn.cuda()
-                    cudnn.benchmark = True
-                snn.Dataloader()
-                for epoch in range(self.args.epochs):
-                    snn.trainn(epoch)
-                    snn.test(epoch)
-                self.Trained_models[self.experiment + "_" + str(snn.count_parameters()) + "_" + str(snn.args.nodes) + "_" + str(snn.args.k) + "_" + str(snn.args.p)]=snn.best_state
-            # save generated and trained models and TODO graphs
-            torch.save(SNNs, self.args.path + "Generated_SNNS_graphs.pkl")
-            torch.save(self.Trained_models , self.args.path + "Trained_SNNs_normal_init.pkl")
+            if os.path.isfile(self.args.path + self.experiment +"_Trained_SNNs_normal_init.pkl"):
+                self.Trained_models = torch.load(self.args.path + self.experiment +"_Trained_SNNs_normal_init.pkl")
+            else:
+                #generate SNNs with parameters in range of (79500,89500) parameters
+                #TODO save generated graph structures
+                SNNs , graphs = generate_SNNs(self.params, self.args, self.kwargs, self.nb_SNNs, self.nodes[2:], self.ks,self.ps)
+                for snn in SNNs:
+                    # self.Trained_models[self.experiment + "_" + str(snn.count_parameters()) + "_" + str(snn.args.nodes) + "_" + str(snn.args.k) + "_" + str(snn.args.p)] = []
+                    # for i in range(self.N):
+                    print("==> Training model.." + self.args.experiment + "_" + str(snn.count_parameters()) + "_" + str(snn.args.nodes)
+                          + "_" + str(snn.args.k) + "_" + str(snn.args.p))
+                    if self.args.cuda:
+                        snn.cuda()
+                        cudnn.benchmark = True
+                    snn.Dataloader()
+                    for epoch in range(self.args.epochs):
+                        snn.trainn(epoch)
+                        snn.test(epoch)
+                    self.Trained_models[self.experiment + "_" + str(snn.count_parameters()) + "_" + str(snn.args.nodes) + "_" + str(snn.args.k) + "_" + str(snn.args.p)]=snn.best_state
+                # save generated and trained models and TODO graphs
+                torch.save(SNNs, self.args.path + "Generated_SNNS_graphs.pkl")
+                torch.save(self.Trained_models , self.args.path + "Trained_SNNs_normal_init.pkl")
 
 
-    def attack(self):
+    def attack_models(self):
         # Attack all trained models and store the results
         self.Results = {}
         for model in self.Trained_models.keys():
-            self.Results[model] = {'Robustness': dta['Success_Rate'], 'Accuracy': net.best_acc,
-                                   '#params': self.Trained_models[model]['#params']}
             # for rep in self.Trained_models[model]:
+            print("==> Attacking %s" % model)
             net = self.Trained_models[model]['model']
             # self.Results[model]['Accuracy'].append(net.best_acc)
             attacker = attacks[self.attack](self.args, Net=net)
             if self.args.cuda:
                 attacker.cuda()
             dta = attacker.attack()
+            if self.attack == "FGSM":
+                dta_ep = attacker.attack_eps()
+                self.Results[model] = {'Avg_epsilon' : dta_ep['Avg_epsilon'] , 'Max_epsilon' : dta_ep['Max_epsilon'],
+                                       'Min_epsilon': dta_ep['Min_epsilon']}
             # self.Results[model]['Robustness'].append(dta['Success_Rate'])
             self.Results[model] = {'Robustness': dta['Success_Rate'], 'Accuracy': net.best_acc,
                                    '#params': self.Trained_models[model]['#params']}
 
         df = pd.DataFrame.from_dict(self.Results, orient='index')
-        df.to_csv(self.args.path_to_results)
+        df.to_csv(self.path_to_results)
+        import ipdb
+        ipdb.set_trace()
         return df
 
-
+models = "tests/results/Trained_SNNs_normal_init.pkl"
 exp = Experiment(args,kwargs, args.experiment, args.method, args.path)
-exp.train()
-results = exp.attack()
+exp.load_models(models)
+# exp.train_models()
+results = exp.attack_models()
+import ipdb
+ipdb.set_trace()

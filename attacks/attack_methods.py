@@ -80,7 +80,6 @@ class FGSM(Attack):
                 y_true = Variable(y_true, requires_grad=False)
 
             # Classify x before Adv_attack
-
             y_pred = np.argmax(self(x).cpu().data.numpy()) if self.args.cuda else np.argmax(self(x).data.numpy())
 
             if y_true.data.item() != y_pred :
@@ -124,10 +123,104 @@ class FGSM(Attack):
             "Success_Rate": 100. * Adv_misclassification / len(y_preds_adversarial),
             "model_acc": self.best_acc
         }
-        with open("utils/adv_examples/FGSM_"+str(self.epsilon) + "_" + self.args.config_file.split('/')[1] + ".pkl", "wb") as f:
-            pickle.dump(adv_dta_dict, f)
+        # with open("utils/adv_examples/FGSM_"+str(self.epsilon) + "_" + self.args.config_file.split('/')[1] + ".pkl", "wb") as f:
+        #     pickle.dump(adv_dta_dict, f)
 
         return adv_dta_dict
+
+    def attack_eps(self):
+        test_loader = generate_samples(self.model)
+        # Load Generated samples
+        # with open("data/" + self.model + "/10k_samples.pkl", "rb") as f:
+        #     samples_10k = pickle.load(f)
+        print("=> Samples loaded. Starting FGSM attack on epsilon....")
+        # xs = samples_10k["images"]
+        # y_trues = samples_10k["labels"]
+        noises = []
+        y_preds = []
+        y_preds_adversarial = []
+        xs_clean = []
+        y_trues_clean = []
+        totalMisclassification = 0
+        Adv_misclassification = 0
+        epsilons = []
+        confidences = []
+        for batch_idx , (x, y_true) in enumerate(test_loader):
+            epsilon = 0.001
+            # make x as Variable
+            if self.args.cuda:
+                x = Variable(x.cuda(),requires_grad=True) if self.model != "CNN" else \
+                    Variable(x.unsqueeze(0).cuda(),requires_grad=True)
+                y_true = Variable(y_true, requires_grad=False).cuda()
+            else:
+                x = Variable(x,requires_grad=True) if self.model != "CNN" else \
+                    Variable(x.unsqueeze(0), requires_grad=True)
+                y_true = Variable(y_true, requires_grad=False)
+
+            # Classify x before Adv_attack
+
+            y_pred = np.argmax(self(x).cpu().data.numpy()) if self.args.cuda else np.argmax(self(x).data.numpy())
+
+            if y_true.data.item() != y_pred :
+                #print("MISCLASSIFICATION")
+                totalMisclassification += 1
+                continue
+
+            #generate an adversarial example
+            x_adversarial = fgsm(self,x,y_true, epsilon)
+
+            # Classify after Adv_attack
+            y_pred_adversarial = np.argmax(self(Variable(x_adversarial)).cpu().data.numpy()) if self.args.cuda else np.argmax(
+                self(Variable(x_adversarial)).data.numpy())
+
+            while y_pred == y_pred_adversarial and epsilon < 1:
+                epsilon += 0.01
+                # generate an adversarial example
+                x_adversarial = fgsm(self, x, y_true, epsilon)
+
+                # Classify after Adv_attack
+                y_pred_adversarial = np.argmax(
+                    self(Variable(x_adversarial)).cpu().data.numpy()) if self.args.cuda else np.argmax(
+                    self(Variable(x_adversarial)).data.numpy())
+
+
+            if self.args.cuda:
+                y_true = y_true.cpu()
+                x = x.cpu()
+                x_adversarial = x_adversarial.cpu()
+
+            if y_pred != y_pred_adversarial:
+                Adv_misclassification += 1
+                epsilons.append(epsilon)
+
+            y_preds.append(y_pred)
+            y_preds_adversarial.append(y_pred_adversarial)
+            noises.append((x_adversarial - x.data).numpy())
+            xs_clean.append(x.data.numpy())
+            y_trues_clean.append(y_true.data.numpy())
+        print("Total misclassifications: ", totalMisclassification, " out of :", len(test_loader.dataset))
+        print('\nTotal misclassified adversarial examples : {} out of {}'
+              '\nSuccess_Rate is {:.3f}%  Average_espsilon : {:.4f}  Max_epsilon : {:.4f} Min_epsilon : {:.4f}'.format(
+            Adv_misclassification, len(y_preds_adversarial),
+            100. * Adv_misclassification / len(
+                y_preds_adversarial), np.mean(epsilons), np.max(epsilons), np.min(epsilons)))
+        adv_dta_dict = {
+            "xs": xs_clean,
+            "y_trues": y_trues_clean,
+            "y_preds": y_preds,
+            "noised": noises,
+            "y_preds_adversarial": y_preds_adversarial,
+            "Avg_epsilon": np.mean(epsilons),
+            "Max_epsilon": np.max(epsilons),
+            "Min_epsilon": np.min(epsilons),
+            "Success_Rate": 100. * Adv_misclassification / len(y_preds_adversarial),
+            "model_acc": self.best_acc
+        }
+        # with open("utils/adv_examples/FGSM_"+str(self.epsilon) + "_" + self.args.config_file.split('/')[1] + ".pkl", "wb") as f:
+        #     pickle.dump(adv_dta_dict, f)
+
+        return adv_dta_dict
+
 
 class One_Pixel(Attack):
     def __init__(self,args,kwargs=None):

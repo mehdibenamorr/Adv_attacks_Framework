@@ -65,4 +65,4 @@ if __name__=="__main__":
     attacker = attacks[args.method](args)
     if args.cuda:
         attacker.cuda()
-    attacker.attack()
+    attacker.attack_eps()

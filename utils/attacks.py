@@ -17,8 +17,7 @@ def fgsm(Net ,x ,y_true ,epsilon=0.1):
     # Add small perturbation
     x_grad = torch.sign(x.grad.data)
     x_adversarial = torch.clamp(x.data + epsilon * x_grad, 0, 1)
-    import ipdb
-    ipdb.set_trace()
+
     return x_adversarial
 
 """One pixel Attack"""
