@@ -64,6 +64,18 @@ def generate_random_dag(N, k, p, dense=-1):
         adj_matrix = np.tril(np.array(g.get_adjacency().data))
         g = Graph.Adjacency((adj_matrix>0).tolist())
         g.to_directed()
+    elif dense == 3:
+        g = Graph()
+        for x in range(170):
+            g.add_vertex(x)
+        for i in range(100):
+            for j in range(50):
+                for k in range(20):
+                    g.add_edge(i,100 + j)
+                    g.add_edge(100 + j, 150 + k)
+        adj_matrix = np.tril(np.array(g.get_adjacency().data))
+        g = Graph.Adjacency((adj_matrix > 0).tolist())
+        g.to_directed()
     else:
         g = Graph.Watts_Strogatz(1,N,k,p)
         adj_matrix = np.tril(np.array(g.get_adjacency().data))
