@@ -155,6 +155,7 @@ class Experiment(object):
         for model in self.Trained_models.keys():
             # for rep in self.Trained_models[model]:
             print("==> Attacking %s" % model)
+            self.Results[model] = {}
             net = self.Trained_models[model]['model']
             # self.Results[model]['Accuracy'].append(net.best_acc)
             attacker = attacks[self.attack](self.args, Net=net)
@@ -163,16 +164,14 @@ class Experiment(object):
             dta = attacker.attack()
             if self.attack == "FGSM":
                 dta_ep = attacker.attack_eps()
-                self.Results[model] = {'Avg_epsilon' : dta_ep['Avg_epsilon'] , 'Max_epsilon' : dta_ep['Max_epsilon'],
+                self.Results[model].update = {'Avg_epsilon' : dta_ep['Avg_epsilon'] , 'Max_epsilon' : dta_ep['Max_epsilon'],
                                        'Min_epsilon': dta_ep['Min_epsilon']}
             # self.Results[model]['Robustness'].append(dta['Success_Rate'])
-            self.Results[model] = {'Robustness': dta['Success_Rate'], 'Accuracy': net.best_acc,
+            self.Results[model].update = {'Robustness': dta['Success_Rate'], 'Accuracy': net.best_acc,
                                    '#params': self.Trained_models[model]['#params']}
 
         df = pd.DataFrame.from_dict(self.Results, orient='index')
         df.to_csv(self.path_to_results)
-        import ipdb
-        ipdb.set_trace()
         return df
 
 models = args.saved_models
