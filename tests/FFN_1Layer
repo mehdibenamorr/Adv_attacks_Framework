@@ -1,6 +1,7 @@
 [Model parameters]
 model = FFN
 layers = 1
+saved_models = tests/results/Trained_FFNs.pkl
 
 
 [Model training Parameters]

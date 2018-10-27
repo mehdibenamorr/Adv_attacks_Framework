@@ -31,6 +31,8 @@ parser.add('--experiment', type=str, default="SNN_experiment",
                     help='the name of the experiment (default: sNN_experiment)')
 parser.add('--path', type=str, default="tests/results/",
                     help='path to save the results (default: tests/results/)')
+parser.add('--saved_models', type=str, default="tests/results/Trained_FFNs",
+                    help='path to saved trained models (default: tests/results/)')
 parser.add('--resume', '-r', action='store_true', help='resume training from checkpoint')
 parser.add('--save', action='store_true', help='save checkpoints when training')
 parser.add('--cuda', action='store_true', help='build the model on GPU')
@@ -173,7 +175,9 @@ class Experiment(object):
         ipdb.set_trace()
         return df
 
-models = "tests/results/Trained_SNNs_normal_init.pkl"
+models = args.saved_models
+import ipdb
+ipdb.set_trace()
 exp = Experiment(args,kwargs, args.experiment, args.method, args.path)
 exp.load_models(models)
 # exp.train_models()
