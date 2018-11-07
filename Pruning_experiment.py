@@ -76,7 +76,7 @@ if args.cuda:
     torch.cuda.manual_seed(args.seed)
 
 #Experiment Hyper parameters
-N = 1 #number of repetitions
+N = 10 #number of repetitions
 attacks = ['FGSM', 'One_Pixel']
 path_to_results = args.path + 'pruning_experiment.csv'
 Trained_models = args.saved_models
@@ -101,7 +101,7 @@ else:
     print("This file was not found %s" % Trained_models)
     models = {}
     print("==> Building and Training models...")
-    for init_func in init_functions[:1]:
+    for init_func in init_functions:
         method_name = list(init_func.keys())[0]
         models[method_name] = []
         for i in range(N):
