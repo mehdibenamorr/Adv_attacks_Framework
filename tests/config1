@@ -4,7 +4,7 @@ nodes = 200
 k = 3
 p = 0.7
 layers = -1
-saved_models = "tests/results/Trained_SNNs_normal_init.pkl"
+saved_models = tests/results/Trained_SNNs_normal_init.pkl
 
 
 [Model training Parameters]
