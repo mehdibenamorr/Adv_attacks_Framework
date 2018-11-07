@@ -70,10 +70,11 @@ def generate_random_dag(N, k, p, dense=-1):
             g.add_vertex(x)
         for i in range(100):
             for j in range(50):
-                for k in range(20):
-                    g.add_edge(i,100 + j)
-                    g.add_edge(100 + j, 150 + k)
-        adj_matrix = np.tril(np.array(g.get_adjacency().data))
+                g.add_edge( 100 + j,i)
+        for j in range(50):
+            for k in range(20):
+                g.add_edge( 150 + k,100 + j)
+        adj_matrix = np.triu(np.array(g.get_adjacency().data))
         g = Graph.Adjacency((adj_matrix > 0).tolist())
         g.to_directed()
     else:
@@ -92,7 +93,7 @@ def layer_indexing(g):
     # num_unindexed_vertices = len(g.vs)
     unindexed_vertices = [v for v in g.vs if v.indegree() > 0]
     vertices_index = [0 if v.indegree() < 1 else -1 for v in g.vs]
-    while len(unindexed_vertices) > 0 :
+    while len(unindexed_vertices) > 0:
         for v in unindexed_vertices:
             in_edges = v.predecessors()
             ind = { vertices_index[vv.index] for vv in in_edges }

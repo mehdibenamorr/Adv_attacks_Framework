@@ -15,4 +15,5 @@ data/*
 *.iml
 *.ckpt
 *.csv
+*.html
 gen_graph.py

@@ -1,6 +1,7 @@
 import pickle
 import torch
 import torch.nn as nn
+from torch.nn import init
 import torch.nn.functional as F
 import torch.optim as optim
 from torchvision import datasets, transforms
@@ -190,7 +191,7 @@ class CNN(Net):
 
 
 class Layer(nn.Module):
-    def __init__(self, in_dims, out_dim, vertices, predecessors, cuda, bias=True):
+    def __init__(self, in_dims, out_dim, vertices, predecessors, cuda, init_method, bias=True,  **kwargs):
         super(Layer,self).__init__()
         self.in_dims = in_dims
         self.out_dim = out_dim
@@ -215,12 +216,22 @@ class Layer(nn.Module):
             self.w_masks.append(mask)
             # import ipdb
             # ipdb.set_trace()
-            weights.append(nn.Parameter(torch.normal(mean=torch.zeros(out_dim,in_dims[i]), std=torch.ones(out_dim,in_dims[i])*0.1)))
+            # weights.append(nn.Parameter(torch.normal(mean=torch.zeros(out_dim,in_dims[i]),
+            #                                          std=torch.ones(out_dim,in_dims[i])*0.1)))
+            weights.append(nn.Parameter(torch.Tensor(out_dim,in_dims[i])))
+
         self.weights = nn.ParameterList(weights)
         if bias:
-            self.bias = nn.Parameter(torch.normal(mean=torch.zeros(out_dim), std=torch.ones(out_dim)*0.1))
+            self.bias = nn.Parameter(torch.Tensor(out_dim))
         else:
             self.register_parameter('bias', None)
+
+        self.reset_parameters(init_method, **kwargs)
+    def reset_parameters(self, init_method, **kwargs):
+        for weight in self.weights:
+            init_method(weight.data, **kwargs)
+        if self.bias is not None:
+            init.constant_(self.bias, 0.)
 
     def forward(self, inputs):
         
@@ -231,8 +242,8 @@ class Layer(nn.Module):
 
 
 class SNN(Net):
-    def __init__(self,args,kwargs, nodes=None, k=None, p=None):
-        super(SNN,self).__init__(args,kwargs)
+    def __init__(self,args,args1, nodes=None, k=None, p=None, init_method=init.normal_, **kwargs):
+        super(SNN,self).__init__(args,args1)
         if (nodes is not None) and (k is not None) and (p is not None):
             graph = generate_random_dag(nodes, k, p, self.args.layers)
             self.args.nodes=nodes
@@ -240,7 +251,7 @@ class SNN(Net):
             self.args.p=p
         else:
             graph = generate_random_dag(self.args.nodes, self.args.k, self.args.p, self.args.layers)
-        self._stucture_graph = graph
+        self._structure_graph = graph
         vertex_by_layers = layer_indexing(graph)
         # Using matrix multiplications
         self.input_layer = nn.Linear(784, len(vertex_by_layers[0]))
@@ -249,12 +260,13 @@ class SNN(Net):
         layers = []
         for i in range(1, len(vertex_by_layers)):
             layers.append(Layer([len(layer) for layer in vertex_by_layers[:i]],
-                                len(vertex_by_layers[i]), vertex_by_layers[i], vertex_by_layers[:i], self.args.cuda))
+                                len(vertex_by_layers[i]), vertex_by_layers[i], vertex_by_layers[:i],
+                                self.args.cuda, init_method, **kwargs))
         self.layers = nn.ModuleList(layers)
 
     def Dataloader(self):
         # self.optimizer = optim.SGD(self.parameters(), lr=self.args.lr)
-        self.optimizer = optim.Adam(self.parameters())
+        self.optimizer = optim.Adam(self.parameters()) #lr = 0.001, eps = 1e-8, weight_decay = L2 penalty (0)
         mnist_transform = transforms.Compose(
             [transforms.ToTensor(), transforms.Normalize((0.1307,), (0.3081,)),transforms.Lambda(flat_trans)]
         )
@@ -277,10 +289,14 @@ class SNN(Net):
         return x
 
     def structure_graph(self):
-        return self._stucture_graph
+        return self._structure_graph
+
+    def structural_properties(self):
+        props = {}
+        props['#params'] = self.count_parameters()
 
     def save(self):
-        del self._stucture_graph
+        # del self._structure_graph
         torch.save(self.state_dict(), "tests/"+self.model+"_"+self.args.config_file.split('/')[1]+".pt")
         # print ("Dumping weights to disk")
         # weights_dict = {}
