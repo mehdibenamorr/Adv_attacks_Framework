@@ -12,14 +12,18 @@ from igraph import *
 from tensorboardX import SummaryWriter
 from paddll.graphs import *
 import itertools
+import sklearn.metrics as metrics
+from igraph import *
+from utils.logger import Logger
 #Define different deep learning models to attack
 
 
 class Net(nn.Module):
-    def __init__(self,args,kwargs=None):
+    def __init__(self,args,kwargs=None,logger=None):
         super(Net, self).__init__()
         self.args=args
         self.kwargs=kwargs
+        self._logger = logger
         self.model = args.model
         # self.writer = SummaryWriter(comment=args.model + '_training_epochs_' + str(args.epochs) + '_lr_' + str(args.lr))
         self.SoftmaxWithXent = nn.CrossEntropyLoss()
@@ -29,12 +33,16 @@ class Net(nn.Module):
     def count_parameters(self):
         return sum(p.numel() for p in self.parameters() if p.requires_grad)
 
-    def trainn(self,epoch):
+    def trainn(self,epoch,):
+        #TODO early stopping for training
         self.train()
+        y_trues = []
+        y_preds = []
         train_loss = 0
         correct = 0
         total =0
         for batch_idx, (data, target) in enumerate(self.train_loader):
+            y_trues += target.tolist()
             if self.args.cuda:
                 data, target = data.cuda(), target.cuda()
             data, target = Variable(data), Variable(target)
@@ -44,23 +52,62 @@ class Net(nn.Module):
             loss.backward()
             self.optimizer.step()
 
-            #logging
+
             train_loss += loss.data.item()
             pred = output.data.max(1, keepdim=True)[1]
+            y_preds += pred.reshape(pred.size(0)).tolist()
             total += target.size(0)
             correct += pred.eq(target.data.view_as(pred)).long().cpu().sum()
 
-            # self.writer.add_scalar('loss',loss.data.item(),(epoch*len(self.train_loader)))
+
             if batch_idx % self.args.log_interval == 0:
                 print('Epoch: {} [{}/{}\tLoss: {:.4f} | Acc: {:.3f}%]'.format(
                     epoch, batch_idx, len(self.train_loader), train_loss/(batch_idx+1), 100.*correct.data.item()/total))
+
+        train_loss /= len(self.train_loader.dataset)
+
+        print('f1_scores : Mirco: {:.5f}, Macro: {:.5f}, Weighted: {:.5f} \n'.format(
+            metrics.f1_score(y_trues, y_preds, average='micro'),
+            metrics.f1_score(y_trues, y_preds, average='macro'),
+            metrics.f1_score(y_trues, y_preds, average='weighted')))
+        # logging with Tensorboard
+        # ================================================================== #
+        #                        Tensorboard Logging                         #
+        # ================================================================== #
+
+        # 1. Log scalar values (scalar summary)
+        info = {'train_loss': train_loss, 'train_accuracy': 100.*correct.data.item()/total,
+                'train_f1_score_micro':metrics.f1_score(y_trues, y_preds, average='micro'),
+                'train_f1_score_macro':metrics.f1_score(y_trues,y_preds,average='macro')}
+
+        for tag, value in info.items():
+            self._logger.scalar_summary(tag, value, epoch + 1)
+
+        # 2. Log values and gradients of the parameters (histogram summary)
+        for tag, value in self.named_parameters():
+            tag = tag.replace('.', '/')
+            # import ipdb
+            # ipdb.set_trace()
+            self._logger.histo_summary(tag, value.data.cpu().numpy(), epoch + 1)
+            try:
+                self._logger.histo_summary(tag + '/grad', value.grad.data.cpu().numpy(), epoch + 1)
+            except AttributeError:
+                print('No gradient data for this parameter')
+                import ipdb
+                ipdb.set_trace()
+
+
+
 
     def test(self,epoch):
         self.eval()
         SoftmaxWithXent = nn.CrossEntropyLoss(size_average=False)
         test_loss = 0
         correct = 0
+        y_trues = []
+        y_preds = []
         for data, target in self.test_loader:
+            y_trues += target.tolist()
             if self.args.cuda:
                 data, target = data.cuda(), target.cuda()
             with torch.no_grad():
@@ -68,6 +115,7 @@ class Net(nn.Module):
             output = self.forward(data)
             test_loss += SoftmaxWithXent(output, target).data.item() # sum up batch loss
             pred = output.data.max(1, keepdim=True)[1]  # get the index of the max log-probability
+            y_preds += pred.reshape(pred.size(0)).tolist()
             correct += pred.eq(target.data.view_as(pred)).long().cpu().sum()
 
         test_loss /= len(self.test_loader.dataset)
@@ -75,10 +123,29 @@ class Net(nn.Module):
         # self.writer.add_scalar('test_loss', test_loss, epoch)
         print('\nTest set: Average loss: {:.4f}, Accuracy: {:.3f}% ({}/{}) \n'.format(
             test_loss, 100. * correct.data.item() / len(self.test_loader.dataset) ,correct, len(self.test_loader.dataset) ))
+        print('f1_scores : Mirco: {:.5f}, Macro: {:.5f}, Weighted: {:.5f} \n'.format(
+            metrics.f1_score(y_trues,y_preds,average='micro'),metrics.f1_score(y_trues,y_preds,average='macro'),
+            metrics.f1_score(y_trues,y_preds,average='weighted')))
+
+        # logging with Tensorboard
+        # ================================================================== #
+        #                        Tensorboard Logging                         #
+        # ================================================================== #
+
+        # 1. Log scalar values (scalar summary)
+        info = {'test_loss': test_loss, 'test_accuracy': 100. * correct.data.item() / len(self.test_loader.dataset),
+                'test_f1_score_micro': metrics.f1_score(y_trues, y_preds, average='micro'),
+                'test_f1_score_macro': metrics.f1_score(y_trues, y_preds, average='macro')}
+
+        for tag, value in info.items():
+            self._logger.scalar_summary(tag, value, epoch + 1)
+
+
 
         #save checkpoint
-
         acc = 100. * correct.data.item() / len(self.test_loader.dataset)
+        # import ipdb
+        # ipdb.set_trace()
         if acc > self.best_acc:
             self.best_acc = acc
             self.best_state = {'model': self, '#params' : self.count_parameters()}
@@ -94,7 +161,8 @@ class Net(nn.Module):
                 torch.save(state, self.args.config_file+'.ckpt')
 
 
-
+    def del_logger(self):
+        del self._logger
 
     def save(self):
         # TODO Get rid of this method
@@ -114,8 +182,8 @@ class Net(nn.Module):
 
 class FFN(Net):
 
-    def __init__(self,args,kwargs):
-        super(FFN,self).__init__(args,kwargs)
+    def __init__(self,args,kwargs,logger=None):
+        super(FFN,self).__init__(args,kwargs,logger)
         if self.args.layers == 1:
             self.fc1 = nn.Linear(28*28,self.args.nodes)
             self.fc2 = nn.Linear(self.args.nodes,10)
@@ -156,8 +224,8 @@ class FFN(Net):
 
 class CNN(Net):
 
-    def __init__(self,args,kwargs):
-        super(CNN,self).__init__(args,kwargs)
+    def __init__(self,args,kwargs,logger=None):
+        super(CNN,self).__init__(args,kwargs,logger)
         self.conv1 = nn.Conv2d(1, 10, kernel_size=5)
         self.conv2 = nn.Conv2d(10, 20, kernel_size=5)
         self.conv2_drop = nn.Dropout2d()
@@ -227,23 +295,24 @@ class Layer(nn.Module):
             self.register_parameter('bias', None)
 
         self.reset_parameters(init_method, **kwargs)
+
     def reset_parameters(self, init_method, **kwargs):
         for weight in self.weights:
             init_method(weight.data, **kwargs)
         if self.bias is not None:
-            init.constant_(self.bias, 0.)
+            init.normal_(self.bias, 0.,0.1)
 
     def forward(self, inputs):
         
         output = []
         for i, inp in enumerate(inputs):
             output.append(inp.matmul(self.weights[i].mul(self.w_masks[i]).t()) )
-        return sum(output)
+        return sum(output)+ self.bias if self.bias is not None else sum(output)
 
 
 class SNN(Net):
-    def __init__(self,args,args1, nodes=None, k=None, p=None, init_method=init.normal_, **kwargs):
-        super(SNN,self).__init__(args,args1)
+    def __init__(self,args,args1, logger=None, nodes=None, k=None, p=None, init_method=init.normal_, **kwargs):
+        super(SNN,self).__init__(args,args1, logger)
         if (nodes is not None) and (k is not None) and (p is not None):
             graph = generate_random_dag(nodes, k, p, self.args.layers)
             self.args.nodes=nodes
@@ -252,6 +321,7 @@ class SNN(Net):
         else:
             graph = generate_random_dag(self.args.nodes, self.args.k, self.args.p, self.args.layers)
         self._structure_graph = graph
+        self._structural_properties = {}
         vertex_by_layers = layer_indexing(graph)
         # Using matrix multiplications
         self.input_layer = nn.Linear(784, len(vertex_by_layers[0]))
@@ -292,8 +362,16 @@ class SNN(Net):
         return self._structure_graph
 
     def structural_properties(self):
-        props = {}
-        props['#params'] = self.count_parameters()
+        self._structural_properties['#params'] = self.count_parameters()
+        self._structural_properties['avg_path_length'] = self._structure_graph.average_path_length() # average geodesic length
+        self._structural_properties['diameter'] = self._structure_graph.diameter() #longest geodesic
+        self._structural_properties['avg_eccentricity'] = mean(self._structure_graph.eccentricity())
+        self._structural_properties['avg_betweenness'] = mean(self._structure_graph.betweenness())
+        self._structural_properties['avg_closeness'] = mean(self._structure_graph.closeness())
+        self._structural_properties['radius'] = self._structure_graph.radius()
+        self._structural_properties['avg_edge_betweenness'] = mean(self._structure_graph.edge_betweenness())
+        self._structural_properties['degree_distribution'] = self._structure_graph.degree() #degree distribution
+        self._structural_properties['density'] = self._structure_graph.density() #density of the graph
 
     def save(self):
         # del self._structure_graph

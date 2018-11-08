@@ -3,6 +3,7 @@ import configargparse
 import torch
 from torch.nn import init
 import torch.backends.cudnn as cudnn
+from utils.logger import Logger
 from models.models import models
 from utils.common import generate_SNNs
 import os
@@ -37,7 +38,7 @@ parser.add('--saved_models', type=str, default="tests/results/Trained_models_pru
 parser.add('--resume', '-r', action='store_true', help='resume training from checkpoint')
 parser.add('--save', action='store_true', help='save checkpoints when training')
 parser.add('--cuda', action='store_true', help='build the model on GPU')
-parser.add('--log-interval', type=int, default=50,
+parser.add('--log-interval', type=int, default=128,
                     help='how many batches to wait before logging training status')
 parser.add('--nodes', type=int, default=200,
                     help='number of nodes for SNN training (default: 200)')
@@ -75,6 +76,10 @@ kwargs = {'num_workers' : 4} if args.cuda else {}
 if args.cuda:
     torch.cuda.manual_seed(args.seed)
 
+#logger
+# logger = Logger('./logs')
+
+
 #Experiment Hyper parameters
 N = 10 #number of repetitions
 attacks = ['FGSM', 'One_Pixel']
@@ -85,8 +90,8 @@ Trained_models = args.saved_models
 # Init functions to use when initializing weights
 init_functions = [{'xavier_normal': init.xavier_normal_, 'kwargs': {'gain': init.calculate_gain('relu')}}
     ,{'xavier_uniform_': init.xavier_uniform_, 'kwargs' : {'gain': init.calculate_gain('relu')}}
-    ,{'He_normal': init.kaiming_normal_, 'kwargs' : {'a': 0, 'mode': 'fan_in', 'non_linearity': 'relu'}}
-    ,{'He_uniform': init.kaiming_uniform_, 'kwargs' : {'a': 0, 'mode': 'fan_in', 'non_linearity': 'relu'}}
+    ,{'He_normal': init.kaiming_normal_, 'kwargs' : {'a': 0, 'mode': 'fan_in', 'nonlinearity': 'relu'}}
+    ,{'He_uniform': init.kaiming_uniform_, 'kwargs' : {'a': 0, 'mode': 'fan_in', 'nonlinearity': 'relu'}}
     ,{'normal': init.normal_, 'kwargs' : {'mean': 0.0 , 'std': 0.1}}
     ,{'uniform' : init.uniform_, 'kwargs': {'a': -0.1, 'b': 0.1}}]
 
@@ -105,20 +110,24 @@ else:
         method_name = list(init_func.keys())[0]
         models[method_name] = []
         for i in range(N):
-            model = SNN(args, kwargs, init_method=init_func[method_name], **init_func['kwargs'])
+            model = SNN(args, kwargs, logger=Logger('./logs/'+method_name+'_run'+ str(i)), init_method=init_func[method_name], **init_func['kwargs'])
             if args.cuda:
                 model.cuda()
                 cudnn.benchmark = True
 
             model.Dataloader()
+            model.structural_properties()
             for epoch in range(args.epochs):
                 model.trainn(epoch)
                 model.test(epoch)
+            model.del_logger()
             models[method_name].append(model)
     print("Training done!")
     torch.save(models,Trained_models)
 
 
 # Pruning, Training, updating, evaluating robustness for each attack along with computing structural properties
+Pruning_steps = 10
+
 
 
