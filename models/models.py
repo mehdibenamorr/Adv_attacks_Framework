@@ -374,8 +374,6 @@ class SNN(Net):
         self._structural_properties['avg_edge_betweenness'] = mean(self._structure_graph.edge_betweenness())
         self._structural_properties['degree_distribution'] = self._structure_graph.degree() #degree distribution
         self._structural_properties['density'] = self._structure_graph.density() #density of the graph
-        import ipdb
-        ipdb.set_trace()
 
     def save(self):
         # del self._structure_graph
