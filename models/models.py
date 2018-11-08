@@ -26,7 +26,7 @@ class Net(nn.Module):
         self._logger = logger
         self.model = args.model
         # self.writer = SummaryWriter(comment=args.model + '_training_epochs_' + str(args.epochs) + '_lr_' + str(args.lr))
-        self.SoftmaxWithXent = nn.CrossEntropyLoss()
+        self.SoftmaxWithXent = nn.CrossEntropyLoss().cuda() if args.cuda else nn.CrossEntropyLoss()
         self.best_acc = 0
         self.best_state = {}
 
@@ -363,6 +363,8 @@ class SNN(Net):
 
     def structural_properties(self):
         self._structural_properties['#params'] = self.count_parameters()
+        self._structural_properties['#nodes'] = self._structure_graph.vcount() # excluding input and output nodes (784,10)
+        self._structural_properties['#edges'] = self._structure_graph.ecount() # excluding connections from input and output layers
         self._structural_properties['avg_path_length'] = self._structure_graph.average_path_length() # average geodesic length
         self._structural_properties['diameter'] = self._structure_graph.diameter() #longest geodesic
         self._structural_properties['avg_eccentricity'] = mean(self._structure_graph.eccentricity())
@@ -372,6 +374,8 @@ class SNN(Net):
         self._structural_properties['avg_edge_betweenness'] = mean(self._structure_graph.edge_betweenness())
         self._structural_properties['degree_distribution'] = self._structure_graph.degree() #degree distribution
         self._structural_properties['density'] = self._structure_graph.density() #density of the graph
+        import ipdb
+        ipdb.set_trace()
 
     def save(self):
         # del self._structure_graph

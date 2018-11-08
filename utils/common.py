@@ -7,10 +7,12 @@ import numpy as np
 from igraph import *
 # from models.models import SNN  #TODO fix this import issue
 
+
 def flat_trans(x):
     x.resize_(28*28)
 
     return x
+
 
 def generate_samples(model):
     #,transforms.Normalize((0.1307,), (0.3081,))
@@ -43,7 +45,6 @@ def vis_adv_org(x_org, x_adv,y_pred,y_adv,target=None):
         plt.title("Original : {}    Adversarial : {}    Perturbation : {:.5f}".format(y_pred,y_adv,noise.mean()))
     plt.imshow(disp_im,cmap='gray')
     plt.show()
-
 
 
 def generate_random_dag(N, k, p, dense=-1):
@@ -108,7 +109,6 @@ def layer_indexing(g):
             vertex_by_layers[-1].append(g.vs[i])
         else:
             vertex_by_layers[vertices_index[i]].append(g.vs[i])
-
 
     return vertex_by_layers
 
