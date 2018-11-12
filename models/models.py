@@ -33,6 +33,14 @@ class Net(nn.Module):
     def count_parameters(self):
         return sum(p.numel() for p in self.parameters() if p.requires_grad)
 
+    def count_layers(self):
+        num_layers=0
+        for module in self.children():
+            if isinstance(module, nn.ModuleList):
+                num_layers += len(module) +1
+        return num_layers
+
+
     def trainn(self,epoch,):
         #TODO early stopping for training
         self.train()
@@ -323,6 +331,7 @@ class SNN(Net):
         self._structure_graph = graph
         self._structural_properties = {}
         vertex_by_layers = layer_indexing(graph)
+        self.vertex_by_layers = vertex_by_layers
         # Using matrix multiplications
         self.input_layer = nn.Linear(784, len(vertex_by_layers[0]))
         self.output_layer = nn.Linear(len(vertex_by_layers[-1]), 10)
@@ -333,7 +342,7 @@ class SNN(Net):
                                 len(vertex_by_layers[i]), vertex_by_layers[i], vertex_by_layers[:i],
                                 self.args.cuda, init_method, **kwargs))
         self.layers = nn.ModuleList(layers)
-
+        self.structural_properties()
     def Dataloader(self):
         # self.optimizer = optim.SGD(self.parameters(), lr=self.args.lr)
         self.optimizer = optim.Adam(self.parameters()) #lr = 0.001, eps = 1e-8, weight_decay = L2 penalty (0)
@@ -386,6 +395,39 @@ class SNN(Net):
         # with open("models/trained/"+self.model+"_weights.pkl", "wb") as f:
         #     pickle.dump(weights_dict, f)
         # print ("Finished dumping to disk...")
+
+class Prune(nn.Module):
+    def __init__(self, model=None, steps= 10):
+        super(Prune,self).__init__()
+        self.model = model
+        self._cuda = self.model.args.cuda
+        self.steps = steps
+        self._sturcture_graph = self.model._structure_graph
+        self._structural_properties = self.model._structural_properties
+        self.modules = self.model.layers
+        self.vertex_by_layers = self.model.vertex_by_layers
+
+        #Pruning parameters
+        self.weight_masks = []
+        self.bias_masks = []
+
+        self.pruned_book = {}
+        self.stats = {'num_pruned': [], 'new_pruned': [], 'accuracy': [], 'Robustness': []}
+
+        self.index = 0
+        self.num_pruned = 0
+        self.num_weights = 0
+
+        self.optimizer = self.model.optimizer
+        self.SoftmaxWithXent = self.model.SoftmaxWithXent
+        import ipdb
+        ipdb.set_trace()
+    def prune(self):
+        for module in self.modules:
+            print(module)
+
+
+
 
 
 class _SparseTorch(nn.Module):

@@ -1,14 +1,16 @@
 from attacks.attack_methods import *
+from models.models import *
 import configargparse
 import torch
 from torch.nn import init
 import torch.backends.cudnn as cudnn
 from utils.logger import Logger
-from models.models import models
-from utils.common import generate_SNNs
+# from models.models import models
+from utils.common import generate_SNNs, count_layers
 import os
 import pandas as pd
 import numpy as np
+
 
 
 parser = configargparse.ArgumentParser()
@@ -114,9 +116,9 @@ else:
             if args.cuda:
                 model.cuda()
                 cudnn.benchmark = True
-
+            import ipdb
+            ipdb.set_trace()
             model.Dataloader()
-            model.structural_properties()
             for epoch in range(args.epochs):
                 model.trainn(epoch)
                 model.test(epoch)
@@ -128,6 +130,7 @@ else:
 
 # Pruning, Training, updating, evaluating robustness for each attack along with computing structural properties
 Pruning_steps = 10
-
+# for model in models:
+#     pruning = Prune(model=model, steps=Pruning_steps)
 
 

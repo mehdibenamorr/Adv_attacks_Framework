@@ -5,8 +5,9 @@ import pickle
 import matplotlib.pyplot as plt
 import numpy as np
 from igraph import *
+import torch.nn as nn
 # from models.models import SNN  #TODO fix this import issue
-
+import models.models
 
 def flat_trans(x):
     x.resize_(28*28)
@@ -143,3 +144,6 @@ def generate_SNNs(params_range, args, kwargs, nb=10, nodes=None, ks=None, ps=Non
                 nb_SNNs += 1
     return SNNs, graph_structures
 
+def count_layers(m):
+    if isinstance(m, nn.ModuleList):
+        print(len(m))
