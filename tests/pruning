@@ -1,10 +1,6 @@
 [Model parameters]
-model = SNN
-nodes = 200
-k = 3
-p = 0.7
-layers = -1
-saved_models = tests/results/SNN_experiment/Trained_SNNs.pkl
+layers = 3
+saved_models = tests/results/Pruning_experiment/Trained_models_pruning.pkl
 
 
 [Model training Parameters]
@@ -20,16 +16,16 @@ cuda = True
 
 
 [Experiment]
-experiment = SNN_experiment
+experiment = Pruning_experiment
 path = tests/results/
+
 [Logging]
-log-interval = 100
+log-interval = 128
 
 [torch parameters]
 seed = 1
 
 [Adversarial attack parameters]
-
 method = FGSM
 epsilon= 0.1
 

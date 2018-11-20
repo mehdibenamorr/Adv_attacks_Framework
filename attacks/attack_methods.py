@@ -14,7 +14,7 @@ import random
 import matplotlib.pyplot as plt
 
 class Attack(Net):
-    def __init__(self,args,kwargs=None,Net=None):
+    def __init__(self,args,kwargs=None,Net=None,logger=None):
         super(Attack,self).__init__(args,kwargs)
         if Net is not None:
             self.Net = Net
@@ -24,6 +24,7 @@ class Attack(Net):
         if args.cuda:
             self.Net.cuda()
             cudnn.benchmark = True
+        self._logger=logger
     def load_model(self,path=None):
         #TODO invoke training in case the model has no checkpoint?
         print('==> Loading the model..')
@@ -44,8 +45,8 @@ class Attack(Net):
 
 
 class FGSM(Attack):
-    def __init__(self,args,kwargs=None,Net=None):
-        super(FGSM,self).__init__(args,kwargs,Net)
+    def __init__(self,args,kwargs=None,Net=None, logger=None):
+        super(FGSM,self).__init__(args,kwargs,Net=Net,logger=logger)
         self.epsilon = args.epsilon
     def forward(self, x):
         return self.Net(x)
@@ -63,10 +64,12 @@ class FGSM(Attack):
         noises = []
         y_preds = []
         y_preds_adversarial = []
+        adversarial_confidences = []
         xs_clean = []
         y_trues_clean = []
         totalMisclassification = 0
         Adv_misclassification = 0
+        correct = 0
         for batch_idx , (x, y_true) in enumerate(test_loader):
 
             # make x as Variable
@@ -86,13 +89,16 @@ class FGSM(Attack):
                 #print("MISCLASSIFICATION")
                 totalMisclassification += 1
                 continue
-
+            correct += 1
             #generate an adversarial example
             x_adversarial = fgsm(self,x,y_true,self.epsilon)
 
             # Classify after Adv_attack
-            y_pred_adversarial = np.argmax(self(Variable(x_adversarial)).cpu().data.numpy()) if self.args.cuda else np.argmax(
-                self(Variable(x_adversarial)).data.numpy())
+            outputs = self(Variable(x_adversarial))
+            y_pred_adversarial = np.argmax(outputs.data.cpu().numpy()) if self.args.cuda else np.argmax(
+                outputs.data.numpy())
+            adversarial_confidence = np.max(F.softmax(outputs, dim=1).data.cpu().numpy()) if self.args.cuda else \
+                np.max(F.softmax(outputs, dim=1).data.numpy())
 
             if self.args.cuda:
                 y_true = y_true.cpu()
@@ -103,25 +109,32 @@ class FGSM(Attack):
                 Adv_misclassification += 1
                 if self.args.V :
                     vis_adv_org(x,x_adversarial,y_pred,y_pred_adversarial)
-            y_preds.append(y_pred)
-            y_preds_adversarial.append(y_pred_adversarial)
-            noises.append((x_adversarial - x.data).numpy())
-            xs_clean.append(x.data.numpy())
-            y_trues_clean.append(y_true.data.numpy())
+                y_preds.append(y_pred)
+                y_preds_adversarial.append(y_pred_adversarial)
+                noises.append((x_adversarial.data - x.data).cpu().numpy())
+                xs_clean.append(x.data.cpu().numpy())
+                y_trues_clean.append(y_true.data.cpu().numpy())
+                adversarial_confidences.append(adversarial_confidence)
+                # 3. Log adversarial images (image summary)
+                info = {'Adv_image': x_adversarial.view(-1, 28, 28).numpy()}
+
+                for tag, image in info.items():
+                    self._logger.image_summary(tag, image, Adv_misclassification)
+
         print("Total misclassifications: ", totalMisclassification, " out of :", len(test_loader.dataset))
         print('\nTotal misclassified adversarial examples : {} out of {}\nSuccess_Rate is {:.3f}%  espsilon : {}'.format(
-            Adv_misclassification, len(y_preds_adversarial),
-            100. * Adv_misclassification / len(
-                y_preds_adversarial),self.epsilon))
+            Adv_misclassification, correct,
+            100. * Adv_misclassification / correct ,self.epsilon))
         adv_dta_dict = {
             "xs": xs_clean,
             "y_trues": y_trues_clean,
             "y_preds": y_preds,
-            "noised": noises,
+            "noises": noises,
             "y_preds_adversarial": y_preds_adversarial,
             "epsilon": self.epsilon,
-            "Success_Rate": 100. * Adv_misclassification / len(y_preds_adversarial),
-            "model_acc": self.best_acc
+            "Success_Rate": 100. * Adv_misclassification / correct,
+            "model_acc": self.best_acc,
+            "Confidences" : adversarial_confidences
         }
         # with open("utils/adv_examples/FGSM_"+str(self.epsilon) + "_" + self.args.config_file.split('/')[1] + ".pkl", "wb") as f:
         #     pickle.dump(adv_dta_dict, f)
@@ -144,7 +157,7 @@ class FGSM(Attack):
         totalMisclassification = 0
         Adv_misclassification = 0
         epsilons = []
-        confidences = []
+        correct = 0
         for batch_idx , (x, y_true) in enumerate(test_loader):
             epsilon = 0.001
             # make x as Variable
@@ -165,7 +178,7 @@ class FGSM(Attack):
                 #print("MISCLASSIFICATION")
                 totalMisclassification += 1
                 continue
-
+            correct+=1
             #generate an adversarial example
             x_adversarial = fgsm(self,x,y_true, epsilon)
 
@@ -173,7 +186,7 @@ class FGSM(Attack):
             y_pred_adversarial = np.argmax(self(Variable(x_adversarial)).cpu().data.numpy()) if self.args.cuda else np.argmax(
                 self(Variable(x_adversarial)).data.numpy())
 
-            while y_pred == y_pred_adversarial and epsilon < 1:
+            while y_pred == y_pred_adversarial and epsilon < 0.26:
                 epsilon += 0.01
                 # generate an adversarial example
                 x_adversarial = fgsm(self, x, y_true, epsilon)
@@ -192,28 +205,29 @@ class FGSM(Attack):
             if y_pred != y_pred_adversarial:
                 Adv_misclassification += 1
                 epsilons.append(epsilon)
+                y_preds.append(y_pred)
+                y_preds_adversarial.append(y_pred_adversarial)
+                noises.append((x_adversarial.data - x.data).cpu().numpy())
+                xs_clean.append(x.data.cpu().numpy())
+                y_trues_clean.append(y_true.data.cpu().numpy())
 
-            y_preds.append(y_pred)
-            y_preds_adversarial.append(y_pred_adversarial)
-            noises.append((x_adversarial - x.data).numpy())
-            xs_clean.append(x.data.numpy())
-            y_trues_clean.append(y_true.data.numpy())
         print("Total misclassifications: ", totalMisclassification, " out of :", len(test_loader.dataset))
         print('\nTotal misclassified adversarial examples : {} out of {}'
               '\nSuccess_Rate is {:.3f}%  Average_espsilon : {:.4f}  Max_epsilon : {:.4f} Min_epsilon : {:.4f}'.format(
-            Adv_misclassification, len(y_preds_adversarial),
-            100. * Adv_misclassification / len(
-                y_preds_adversarial), np.mean(epsilons), np.max(epsilons), np.min(epsilons)))
+            Adv_misclassification, correct,
+            100. * Adv_misclassification / correct, np.mean(epsilons), np.max(epsilons), np.min(epsilons)))
+
+
         adv_dta_dict = {
             "xs": xs_clean,
             "y_trues": y_trues_clean,
             "y_preds": y_preds,
-            "noised": noises,
+            "noises": noises,
             "y_preds_adversarial": y_preds_adversarial,
             "Avg_epsilon": np.mean(epsilons),
             "Max_epsilon": np.max(epsilons),
             "Min_epsilon": np.min(epsilons),
-            "Success_Rate": 100. * Adv_misclassification / len(y_preds_adversarial),
+            "Success_Rate": 100. * Adv_misclassification / correct,
             "model_acc": self.best_acc
         }
         # with open("utils/adv_examples/FGSM_"+str(self.epsilon) + "_" + self.args.config_file.split('/')[1] + ".pkl", "wb") as f:
@@ -223,8 +237,14 @@ class FGSM(Attack):
 
 
 class One_Pixel(Attack):
-    def __init__(self,args,kwargs=None):
-        super(One_Pixel,self).__init__(args,kwargs)
+    def __init__(self,args,kwargs=None, Net=None, logger=None):
+        super(One_Pixel,self).__init__(args,kwargs,Net=Net, logger=logger)
+
+        self.max_iter = self.args.max_iter
+        self.popsize = self.args.popsize
+        self.samples = self.args.samples
+        self.pixles = self.args.pixels
+        self.targeted = self.args.targeted
 
     def forward(self, x):
         return self.Net(x)
@@ -245,14 +265,16 @@ class One_Pixel(Attack):
         totalMisclassification = 0
         correct = 0
         Adv_misclassification = 0
-        success_rate = 0
+        adversarial_confidences = []
         for batch_idx, (x, y_true) in enumerate(test_loader):
 
+            num_adv = 0 # number of successful generated adversarial examples from a sample
             if self.model == "CNN":
                 x = x.unsqueeze(0)
             with torch.no_grad():
                 img_var = Variable(x).cuda() if self.args.cuda else Variable(x)
             prior_probs = F.softmax(self.Net(img_var),dim=1)
+
             y_pred = np.argmax(prior_probs.cpu().data.numpy()) if self.args.cuda else np.argmax(prior_probs.data.numpy())
 
             if y_true.data.item() != y_pred :
@@ -268,24 +290,56 @@ class One_Pixel(Attack):
                     if target_class==y_true:
                         continue
 
-                flag, x, adv_img = one_pixel(x,y_true, self.Net,self.model,target_class, pixels=self.args.pixels,
+                flag, x_, adv_img = one_pixel(x,y_true, self.Net,self.model,target_class, pixels=self.args.pixels,
                                     maxiter=self.args.max_iter, popsize= self.args.popsize,cuda=self.args.cuda)
-                Adv_misclassification += flag
-                if self.args.targeted:
-                    success_rate = float(Adv_misclassification)/(9*correct)
-                else:
-                    success_rate = float(Adv_misclassification)/correct
 
-                if flag == 1:
-                    print("success rate : {:.4f}  ({}/{}) [(x,y) = ({},{}) and I = {}]".format(success_rate,Adv_misclassification,
-                                                                                               correct,x[0],x[1],x[2]))
+                Adv_misclassification += flag
+                num_adv += flag
+
+                if flag:
+                    outputs = self(adv_img)
+                    y_pred_adversarial = np.argmax(outputs.data.cpu().numpy()) if self.args.cuda else np.argmax(
+                        outputs.data.numpy())
+                    adversarial_confidence = np.max(F.softmax(outputs, dim=1).data.cpu().numpy()) if self.args.cuda else \
+                        np.max(F.softmax(outputs, dim=1).data.numpy())
+                    # y_pred_adversarial = np.argmax(self(adv_img).cpu().data.numpy()) if self.args.cuda else np.argmax(
+                    #     self(self(adv_img)).data.numpy())
+
+                    y_preds.append(y_pred)
+                    y_preds_adversarial.append(y_pred_adversarial)
+                    noises.append((adv_img.data - img_var.data).cpu().numpy())
+                    xs_clean.append(img_var.data.cpu().numpy())
+                    y_trues_clean.append(y_true)
+                    adversarial_confidences.append(adversarial_confidence)
+                    # 3. Log adversarial images (image summary)
+                    info = {'Adv_image': adv_img.view(-1,28,28).cpu().numpy()}
+
+                    for tag, image in info.items():
+                        self._logger.image_summary(tag, image, Adv_misclassification)
+
             if correct == self.args.samples:
                 break
 
+        success_rate = Adv_misclassification / correct
         print("Total misclassifications: ", totalMisclassification, " out of :", self.args.samples)
         print('\nTotal misclassified adversarial examples : {}/{} \nSuccess_Rate is {:.3f}%'.format(
             Adv_misclassification,correct,
             100. * success_rate))
+
+
+
+        adv_dta_dict = {
+            "xs": xs_clean,
+            "y_trues": y_trues_clean,
+            "y_preds": y_preds,
+            "noises": noises,
+            "y_preds_adversarial": y_preds_adversarial,
+            "Success_Rate": 100.*success_rate,
+            "model_acc": self.best_acc,
+            "Confidences": adversarial_confidences
+        }
+
+        return adv_dta_dict
 
 
 class L_BFGS(Attack):

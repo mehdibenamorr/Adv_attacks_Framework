@@ -4,9 +4,11 @@ import torch
 import torch.backends.cudnn as cudnn
 from models.models import models
 from utils.common import generate_SNNs
+import torch.nn.init as init
 import os
 import pandas as pd
 import numpy as np
+from utils.logger import Logger
 
 
 parser = configargparse.ArgumentParser()
@@ -59,7 +61,7 @@ parser.add('--max_iter', type=int, default=100,
                     help='maximum iter for DE algorithm (default: 100)')
 parser.add('--pixels', type=int, default=1,
                     help='The number of pixels that can be perturbed.(default: 1)')
-parser.add('--popsize', default=400, type=int, help='The number of adverisal examples in each iteration.')
+parser.add('--popsize', default=400, type=int, help='The number of adversarial examples in each iteration.')
 parser.add('--samples', default=100, type=int, help='The number of image samples to attack.')
 parser.add('--targeted', action='store_true', help='Set this switch to test for targeted attacks.')
 parser.add('--V', action='store_true', default=False,
@@ -74,36 +76,48 @@ kwargs = {'num_workers' : 4} if args.cuda else {}
 if args.cuda:
     torch.cuda.manual_seed(args.seed)
 
+init_functions = [{'xavier_normal': init.xavier_normal_, 'kwargs': {'gain': init.calculate_gain('relu')}}
+    ,{'xavier_uniform_': init.xavier_uniform_, 'kwargs' : {'gain': init.calculate_gain('relu')}}
+    ,{'He_normal': init.kaiming_normal_, 'kwargs' : {'a': 0, 'mode': 'fan_in', 'nonlinearity': 'relu'}}
+    ,{'He_uniform': init.kaiming_uniform_, 'kwargs' : {'a': 0, 'mode': 'fan_in', 'nonlinearity': 'relu'}}
+    ,{'normal': init.normal_, 'kwargs' : {'mean': 0.0 , 'std': 0.1}}
+    ,{'uniform' : init.uniform_, 'kwargs': {'a': -0.1, 'b': 0.1}}]
+
 
 class Experiment(object):
-    def __init__(self,args,kwargs, experiment, attack, path):
+    def __init__(self,args,kwargs, experiment, path):
         # Experiment setting
         self.args = args
         self.kwargs = kwargs
         self.experiment = experiment
-        self.attack = attack
-        self.path_to_results = path + experiment + ".csv"
-        self.nodes = [50, 100, 150, 200, 250, 300, 350, 400]  # for FFN experiment
-        self.ks = [3,4,5,6,8,10,]
-        self.ps = [0.5,0.6,0.7,0.8]
-        self.N = 10  # number of repetitions
-        self.params = range(69500,89500)  #range of parameters for SNNs generation
-        self.nb_SNNs = 10
+        self.attacks = ['FGSM','One_Pixel']
+        self.path_to_results = path + experiment + "/"+ experiment + ".csv"
+        self.nodes = [150, 200, 250, 300, 350, 400, 500]  # for FFN experiment
+        self.ks = [2,4,6,8,10,20]
+        self.ps = [0.5,0.6,0.7,0.8,0.9]
+        # self.N = 10  # number of repetitions
+        self.params = range(50000,91000)  #range of parameters for SNNs generation
+        self.nb_SNNs = 100
         self.Trained_models={}
         self.Results = {}
+        self.attacks_data = {}
 
-    def load_models(self,file_path):
-        if os.path.isfile(file_path):
+    def load_models(self, path = None):
+        if path is not None and os.path.isfile(path):
+            self.Trained_models = torch.load(path)
+        elif os.path.isfile(self.args.path + self.experiment + "/Trained_SNNs_{}.pkl".format(str(self.params))):
             # import ipdb
             # ipdb.set_trace()
-            self.Trained_models = torch.load(file_path)
+            self.Trained_models = torch.load(self.args.path + self.experiment + "/Trained_SNNs_{}.pkl".format(str(self.params)))
         else:
-            print("This file was not found %s" % file_path)
+            print("This file {} was not found ".format(self.args.path + self.experiment +"/Trained_SNNs_{}.pkl".format(str(self.params))))
+            print("Starting training...")
+            self.train_models()
 
     def train_models(self):
         if self.args.model == 'FFN':
-            if os.path.isfile(self.args.path + self.experiment +"_Trained_FFNs.pkl"):
-                self.Trained_models = torch.load(self.args.path + self.experiment +"_Trained_FFNs.pkl")
+            if os.path.isfile(self.args.path + self.experiment +"/Trained_FFNs.pkl"):
+                self.Trained_models = torch.load(self.args.path + self.experiment +"/Trained_FFNs.pkl")
             else:
                 # Train All the models and store them temporarily
                 # import ipdb
@@ -123,63 +137,103 @@ class Experiment(object):
                         model.trainn(epoch)
                         model.test(epoch)
                     self.Trained_models[self.args.experiment + "_" + str(n)] = model.best_state
-                torch.save(self.Trained_models, self.args.path + self.experiment +"_Trained_FFNs.pkl")
+                torch.save(self.Trained_models, self.args.path + self.experiment +"/Trained_FFNs.pkl")
         elif self.args.model == 'SNN':
-            if os.path.isfile(self.args.path + self.experiment +"_Trained_SNNs_normal_init.pkl"):
-                self.Trained_models = torch.load(self.args.path + self.experiment +"_Trained_SNNs_normal_init.pkl")
+            if os.path.isfile(self.args.path + self.experiment +"/Generated_SNNS_graphs_{}.pkl".format(str(self.params))):
+                graphs = torch.load(self.args.path + self.experiment +"/Generated_SNNS_graphs_{}.pkl".format(str(self.params)))
             else:
                 #generate SNNs with parameters in range of (79500,89500) parameters
-                #TODO save generated graph structures
-                SNNs , graphs = generate_SNNs(self.params, self.args, self.kwargs, self.nb_SNNs, self.nodes[2:], self.ks,self.ps)
-                for snn in SNNs:
-                    # self.Trained_models[self.experiment + "_" + str(snn.count_parameters()) + "_" + str(snn.args.nodes) + "_" + str(snn.args.k) + "_" + str(snn.args.p)] = []
-                    # for i in range(self.N):
-                    print("==> Training model.." + self.args.experiment + "_" + str(snn.count_parameters()) + "_" + str(snn.args.nodes)
-                          + "_" + str(snn.args.k) + "_" + str(snn.args.p))
+                #TODO save generated graph structures / Done
+                graphs = generate_SNNs(self.params, self.args, self.kwargs, self.nb_SNNs, self.nodes, self.ks,self.ps)
+                #save generated graphs
+                torch.save(graphs, self.args.path + self.experiment +"/Generated_SNNS_graphs_{}.pkl".format(str(self.params)))
+            for idx ,(params, graph) in enumerate(graphs):
+                for init_func in init_functions:
+                    method_name = list(init_func.keys())[0]
+                    snn = SNN(args, kwargs, graph,
+                              logger=Logger('logs/'+self.experiment+'/'+'SNN_'+str(idx) + '/' + method_name),
+                              nodes=params['nodes'], k=params['k'], p=params['p'],
+                              init_method=init_func[method_name], **init_func['kwargs'])
+
                     if self.args.cuda:
                         snn.cuda()
                         cudnn.benchmark = True
+                    self.Trained_models[self.experiment + "_" +
+                                        str(snn.count_parameters()) + "_" +
+                                        str(snn.args.nodes) + "_" +
+                                        str(snn.args.k) + "_" +
+                                        str(snn.args.p)] = {}
+                    # for i in range(self.N):
+                    print("==> Training model.." + self.args.experiment + "_" +
+                          str(snn.count_parameters()) + "_" +
+                          str(snn.args.nodes) + "_" +
+                          str(snn.args.k) + "_" +
+                          str(snn.args.p) + "_" +
+                          method_name)
                     snn.Dataloader()
+                    snn.structural_properties()
                     for epoch in range(self.args.epochs):
                         snn.trainn(epoch)
                         snn.test(epoch)
-                    self.Trained_models[self.experiment + "_" + str(snn.count_parameters()) + "_" + str(snn.args.nodes) + "_" + str(snn.args.k) + "_" + str(snn.args.p)]=snn.best_state
-                # save generated and trained models and TODO graphs
-                torch.save(SNNs, self.args.path + "Generated_SNNS_graphs.pkl")
-                torch.save(self.Trained_models , self.args.path + "Trained_SNNs_normal_init.pkl")
+                    snn.del_logger()
+                    self.Trained_models[self.experiment + "_" +
+                                        str(snn.count_parameters()) + "_" +
+                                        str(snn.args.nodes) + "_" +
+                                        str(snn.args.k) + "_" +
+                                        str(snn.args.p)][method_name] = snn.best_state
+            # save trained models
+            torch.save(self.Trained_models , self.args.path + self.experiment +
+                       "/Trained_SNNs_{}.pkl".format(str(self.params)))
 
 
     def attack_models(self):
         # Attack all trained models and store the results
         self.Results = {}
+        self.attacks_data = {}
+
         for model in self.Trained_models.keys():
-            # for rep in self.Trained_models[model]:
-            print("==> Attacking %s" % model)
+            self.attacks_data[model] = {}
             self.Results[model] = {}
-            net = self.Trained_models[model]['model']
-            # self.Results[model]['Accuracy'].append(net.best_acc)
-            attacker = attacks[self.attack](self.args, Net=net)
-            if self.args.cuda:
-                attacker.cuda()
-            dta = attacker.attack()
-            if self.attack == "FGSM":
-                dta_ep = attacker.attack_eps()
-                self.Results[model].update({'Avg_epsilon' : dta_ep['Avg_epsilon'] , 'Max_epsilon' : dta_ep['Max_epsilon'],
-                                       'Min_epsilon': dta_ep['Min_epsilon']})
-            # self.Results[model]['Robustness'].append(dta['Success_Rate'])
-            self.Results[model].update({'Robustness': dta['Success_Rate'], 'Accuracy': net.best_acc,
-                                   '#params': self.Trained_models[model]['#params']})
+            for init_func in self.Trained_models[model].keys():
+                self.attacks_data[model][init_func]= {}
+                self.Results[model][init_func] = {}
+                Logger
+                for attack in self.attacks:
+                    print("==> Attacking {} __ {} with {} ".format(model, init_func, attack))
+                    self.Results[model][init_func][attack] = {}
+                    net = self.Trained_models[model][init_func]['model']
+                    self.Results[model][init_func][attack].update(net.get_structural_properties())
+                    attacker = attacks[attack](self.args, Net=net, logger=Logger('logs/' + self.experiment +
+                                                                                 '/' + model +
+                                                                                 '/' + init_func+'/'+attack))
+                    if self.args.cuda:
+                        attacker.cuda()
+                    dta = attacker.attack()
+                    self.attacks_data[model][init_func][attack] = dta
+                    if attack == "FGSM":
+                        dta_ep = attacker.attack_eps()
+                        self.Results[model][init_func][attack].update({'Avg_epsilon' : dta_ep['Avg_epsilon'] ,
+                                                                       'Max_epsilon' : dta_ep['Max_epsilon'],
+                                                                       'Min_epsilon': dta_ep['Min_epsilon']})
+                        self.attacks_data[model][init_func]['FGSM_eps'] = dta_ep
+                    # self.Results[model]['Robustness'].append(dta['Success_Rate'])
+                    self.Results[model][init_func][attack].update({'Robustness': dta['Success_Rate'],
+                                                                   'Avg_confidence': np.mean(dta['Confidences']),
+                                                                   'Max_confidence': np.max(dta['Confidences']),
+                                                                   'Accuracy': net.best_acc})
 
         df = pd.DataFrame.from_dict(self.Results, orient='index')
         df.to_csv(self.path_to_results)
+        with open("utils/adv_examples/"+ self.experiment + str(self.params)+ ".pkl","wb") as f:
+            pickle.dump(self.attacks_data, f)
         return df
 
-models = args.saved_models
+# models = args.saved_models
+
+
+exp = Experiment(args,kwargs, args.experiment, args.path)
+exp.load_models()
 import ipdb
 ipdb.set_trace()
-exp = Experiment(args,kwargs, args.experiment, args.method, args.path)
-exp.load_models(models)
-# exp.train_models()
 results = exp.attack_models()
-import ipdb
-ipdb.set_trace()
+

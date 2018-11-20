@@ -15,7 +15,6 @@ import itertools
 import sklearn.metrics as metrics
 from igraph import *
 from utils.logger import Logger
-#Define different deep learning models to attack
 
 
 class Net(nn.Module):
@@ -33,12 +32,7 @@ class Net(nn.Module):
     def count_parameters(self):
         return sum(p.numel() for p in self.parameters() if p.requires_grad)
 
-    def count_layers(self):
-        num_layers=0
-        for module in self.children():
-            if isinstance(module, nn.ModuleList):
-                num_layers += len(module) +1
-        return num_layers
+
 
 
     def trainn(self,epoch,):
@@ -156,7 +150,7 @@ class Net(nn.Module):
         # ipdb.set_trace()
         if acc > self.best_acc:
             self.best_acc = acc
-            self.best_state = {'model': self, '#params' : self.count_parameters()}
+            self.best_state = {'model': self}
             if self.args.save:
                 print('Saving..')
                 state = {
@@ -297,6 +291,7 @@ class Layer(nn.Module):
             weights.append(nn.Parameter(torch.Tensor(out_dim,in_dims[i])))
 
         self.weights = nn.ParameterList(weights)
+        self.bias_mask = torch.ones(out_dim).cuda() if cuda else torch.ones(out_dim)
         if bias:
             self.bias = nn.Parameter(torch.Tensor(out_dim))
         else:
@@ -314,24 +309,40 @@ class Layer(nn.Module):
         
         output = []
         for i, inp in enumerate(inputs):
-            output.append(inp.matmul(self.weights[i].mul(self.w_masks[i]).t()) )
-        return sum(output)+ self.bias if self.bias is not None else sum(output)
+            output.append(inp.matmul(self.weights[i].mul(self.w_masks[i]).t()))
+        return sum(output) + self.bias*self.bias_mask if self.bias is not None else sum(output)
 
 
 class SNN(Net):
-    def __init__(self,args,args1, logger=None, nodes=None, k=None, p=None, init_method=init.normal_, **kwargs):
+    def __init__(self,args,args1, Graph=None, logger=None, nodes=None, k=None, p=None, init_method=init.normal_, **kwargs):
+        """
+
+        :param args:
+        :param args1:
+        :param Graph:
+        :param logger:
+        :param nodes:
+        :param k:
+        :param p:
+        :param init_method:
+        :param kwargs:
+        """
         super(SNN,self).__init__(args,args1, logger)
-        if (nodes is not None) and (k is not None) and (p is not None):
+        if Graph is not None:
+            graph = Graph
+            self.args.nodes = nodes
+            self.args.k = k
+            self.args.p = p
+        elif (nodes is not None) and (k is not None) and (p is not None):
             graph = generate_random_dag(nodes, k, p, self.args.layers)
-            self.args.nodes=nodes
-            self.args.k=k
-            self.args.p=p
+            self.args.nodes = nodes
+            self.args.k = k
+            self.args.p = p
         else:
             graph = generate_random_dag(self.args.nodes, self.args.k, self.args.p, self.args.layers)
         self._structure_graph = graph
         self._structural_properties = {}
-        vertex_by_layers = layer_indexing(graph)
-        self.vertex_by_layers = vertex_by_layers
+        vertex_by_layers = layer_indexing(self._structure_graph)
         # Using matrix multiplications
         self.input_layer = nn.Linear(784, len(vertex_by_layers[0]))
         self.output_layer = nn.Linear(len(vertex_by_layers[-1]), 10)
@@ -342,7 +353,34 @@ class SNN(Net):
                                 len(vertex_by_layers[i]), vertex_by_layers[i], vertex_by_layers[:i],
                                 self.args.cuda, init_method, **kwargs))
         self.layers = nn.ModuleList(layers)
-        self.structural_properties()
+
+
+        # Pruning parameters
+        self.weight_masks = []
+        self.bias_masks = []
+        self.pruned_book = {}
+        self.stats = {'num_pruned': [], 'new_pruned': [], 'f1_score': [], 'Robustness': []}
+
+
+    def count_parameters(self):
+        #TODO include masks in counting/ Done
+        num_params = 0
+        num_params += sum(p.numel() for p in self.input_layer.parameters() if p.requires_grad)
+        num_params += sum(p.numel() for p in self.output_layer.parameters() if p.requires_grad)
+        for module in self.layers:
+            for i in range(len(module.weights)):
+                num_params += torch.nonzero(module.weights[i].mul(module.w_masks[i])).size(0)
+            num_params += torch.nonzero(module.bias.mul(module.bias_mask)).size(0)
+
+        return num_params
+
+    def count_layers(self):
+        num_layers=0
+        for module in self.children():
+            if isinstance(module, nn.ModuleList):
+                num_layers += len(module) +1
+        return num_layers
+
     def Dataloader(self):
         # self.optimizer = optim.SGD(self.parameters(), lr=self.args.lr)
         self.optimizer = optim.Adam(self.parameters()) #lr = 0.001, eps = 1e-8, weight_decay = L2 penalty (0)
@@ -384,6 +422,133 @@ class SNN(Net):
         self._structural_properties['degree_distribution'] = self._structure_graph.degree() #degree distribution
         self._structural_properties['density'] = self._structure_graph.density() #density of the graph
 
+
+    def get_structural_properties(self):
+        return self._structural_properties
+
+    def prune(self, alpha = 0.25):
+        """
+
+        :param alpha: sensitivity or quality of the weight pruning (Threshold : alpha * std(weights))
+        :return:
+        """
+        self.index = 0
+        self.num_pruned = 0
+        self.num_weights = 0
+        self.alpha = alpha
+        vertex_by_layers = layer_indexing(self._structure_graph)
+        for l, module in enumerate(self.layers):
+            weight = module.weights[-1].mul(module.w_masks[-1])
+            weight_num = torch.numel(weight.data)
+            weight_mask = torch.ge(weight.data.abs(), alpha * weight.data.std()).type('torch.FloatTensor')
+            bias_mask = torch.ones(module.bias.data.size())
+            if self.args.cuda:
+                weight_mask = weight_mask.cuda()
+                bias_mask = bias_mask.cuda()
+
+            if len(self.weight_masks) <= self.index:
+                self.weight_masks.append(weight_mask)
+            else:
+                self.weight_masks[self.index] = weight_mask
+
+            for i in range(bias_mask.size(0)):
+                if len(torch.nonzero(weight_mask[i]).size()) == 0:
+                    bias_mask[i] = 0
+            if len(self.bias_masks) <= self.index:
+                self.bias_masks.append(bias_mask)
+            else:
+                self.bias_masks[self.index] = bias_mask
+
+            self.index += 1
+
+            # TODO transfer these mask to the graph structure outside of the prune function
+            deleted_connections = (weight_mask == 0).nonzero().data.cpu().numpy()
+            for e in deleted_connections:
+                try:
+                    self._structure_graph.delete_edges(self._structure_graph.get_eid(vertex_by_layers[l][e[1]].index,
+                                                                                 vertex_by_layers[l+1][e[0]].index))
+                except igraph._igraph.InternalError:
+                    pass
+
+            for n in (bias_mask==0).nonzero().data.cpu().numpy():
+                if vertex_by_layers[l+1][n[0]].outdegree() == 0:
+                    try:
+                        self._structure_graph.delete_vertices(vertex_by_layers[l+1][n[0]].index)
+                    except igraph._igraph.InternalError:
+                        pass
+
+            layer_pruned = weight_num - torch.nonzero(weight_mask).size(0)
+            print("{} pruned weights of layer {}".format(100*(layer_pruned/weight_num), self.index))
+            bias_num = torch.numel(module.bias.data)
+            bias_pruned = bias_num - torch.nonzero(bias_mask).size(0)
+            print("{} pruned biases of layer {}".format(100*(bias_pruned/bias_num), self.index))
+
+            if self.index not in self.pruned_book.keys():
+                self.pruned_book[self.index] = [100*layer_pruned/weight_num]
+            else:
+                self.pruned_book[self.index].append(100*layer_pruned/weight_num)
+
+            self.num_pruned += layer_pruned
+            self.num_weights += weight_num
+
+            module.weights[-1].data *= weight_mask
+            module.bias.data *= bias_mask
+
+    def set_grad(self):
+        for module in self.layers:
+            module.weights[-1].grad.data *= self.weight_masks[self.index]
+            module.bias.grad.data *= self.bias_masks[self.index]
+            self.index += 1
+
+    def train_pruned(self):
+        y_trues = []
+        y_preds = []
+        for data, target in self.train_loader:
+            self.index = 0
+            y_trues += target.tolist()
+            if self.args.cuda:
+                data, target = data.cuda(), target.cuda()
+            with torch.no_grad():
+                data, target = Variable(data), Variable(target)
+            self.optimizer.zero_grad()
+            output = self.forward(data)
+            loss = self.SoftmaxWithXent(output, target)
+            loss.backward()
+            self.set_grad() # mask the gradient data of the weights
+
+            self.optimizer.step()
+            pred = output.data.max(1, keepdim=True)[1]  # get the index of the max log-probability
+            y_preds += pred.reshape(pred.size(0)).tolist()
+
+        # print('f1_scores : Mirco: {:.5f}, Macro: {:.5f}, Weighted: {:.5f} \n Precision_score : {:.5f} %'.format(
+        #     metrics.f1_score(y_trues, y_preds, average='micro'), metrics.f1_score(y_trues, y_preds, average='macro'),
+        #     metrics.f1_score(y_trues, y_preds, average='weighted'),
+        #     100*metrics.precision_score(y_trues, y_preds, average='micro')))
+
+
+
+    def validate(self):
+        y_trues = []
+        y_preds = []
+        for data, target in self.test_loader:
+            y_trues += target.tolist()
+            if self.args.cuda:
+                data, target = data.cuda(), target.cuda()
+            with torch.no_grad():
+                data, target = Variable(data), Variable(target)
+            output = self.forward(data)
+            pred = output.data.max(1, keepdim=True)[1]  # get the index of the max log-probability
+            y_preds += pred.reshape(pred.size(0)).tolist()
+
+        # print('f1_scores : Mirco: {:.5f}, Macro: {:.5f}, Weighted: {:.5f} \n Precision_score : {:.5f} %'.format(
+        #     metrics.f1_score(y_trues, y_preds, average='micro'), metrics.f1_score(y_trues, y_preds, average='macro'),
+        #     metrics.f1_score(y_trues, y_preds, average='weighted'), metrics.precision_score(y_trues,y_preds, average='micro')))
+
+        return metrics.f1_score(y_trues,y_preds, average='micro')
+
+
+
+
     def save(self):
         # del self._structure_graph
         torch.save(self.state_dict(), "tests/"+self.model+"_"+self.args.config_file.split('/')[1]+".pt")
@@ -395,39 +560,6 @@ class SNN(Net):
         # with open("models/trained/"+self.model+"_weights.pkl", "wb") as f:
         #     pickle.dump(weights_dict, f)
         # print ("Finished dumping to disk...")
-
-class Prune(nn.Module):
-    def __init__(self, model=None, steps= 10):
-        super(Prune,self).__init__()
-        self.model = model
-        self._cuda = self.model.args.cuda
-        self.steps = steps
-        self._sturcture_graph = self.model._structure_graph
-        self._structural_properties = self.model._structural_properties
-        self.modules = self.model.layers
-        self.vertex_by_layers = self.model.vertex_by_layers
-
-        #Pruning parameters
-        self.weight_masks = []
-        self.bias_masks = []
-
-        self.pruned_book = {}
-        self.stats = {'num_pruned': [], 'new_pruned': [], 'accuracy': [], 'Robustness': []}
-
-        self.index = 0
-        self.num_pruned = 0
-        self.num_weights = 0
-
-        self.optimizer = self.model.optimizer
-        self.SoftmaxWithXent = self.model.SoftmaxWithXent
-        import ipdb
-        ipdb.set_trace()
-    def prune(self):
-        for module in self.modules:
-            print(module)
-
-
-
 
 
 class _SparseTorch(nn.Module):

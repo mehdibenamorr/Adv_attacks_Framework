@@ -118,32 +118,29 @@ def generate_SNNs(params_range, args, kwargs, nb=10, nodes=None, ks=None, ps=Non
     from models.models import SNN
     print("==> Generating SNNs with #paramerters in " + str(params_range))
     nb_SNNs = 0
-    SNNs = []
     graph_structures = []
     while nb_SNNs < nb:
         if (nodes is not None) and (ks is not None) and (ps is not None):
             for node in nodes:
                 for k in ks:
                     for p in ps:
-                        snn = SNN(args,kwargs,node,k,p)
+                        snn = SNN(args,kwargs,nodes=node,k=k,p=p)
+                        if args.cuda: snn.cuda()
                         print("nodes:",str(node),"k: ",str(k),"p: ",str(p), "#params: ", str(snn.count_parameters()))
                         if snn.count_parameters() in params_range:
-                            SNNs.append(snn)
-                            graph_structures.append(snn.structure_graph())
+                            params = {'nodes': node,'k': k,'p':p}
+                            graph_structures.append((params,snn.structure_graph()))
                             print("saved")
                             nb_SNNs+=1
                             if nb_SNNs == nb:
-                                return SNNs, graph_structures
+                                return graph_structures
         else:
             snn = SNN(args,kwargs)
             print("nodes:", str(args.nodes), "k: ", str(args.k), "p: ", str(args.p), "#params: ", str(snn.count_parameters()))
             if snn.count_parameters() in params_range:
-                SNNs.append(snn)
-                graph_structures.append(snn.structure_graph())
+                params = {'nodes': args.nodes, 'k': args.k, 'p': args.p}
+                graph_structures.append((params,snn.structure_graph()))
                 print("saved")
                 nb_SNNs += 1
-    return SNNs, graph_structures
+    return graph_structures
 
-def count_layers(m):
-    if isinstance(m, nn.ModuleList):
-        print(len(m))
