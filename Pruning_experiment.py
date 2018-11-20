@@ -175,7 +175,7 @@ for name in models:
             f1_score= model.validate()
             # evaluate Robustness (FGSM, FGSM_eps, One_Pixel)
             # TODO
-            for attack in attacks_[1:]:
+            for attack in attacks_:
                 print("==> Attacking {} __ run {} with {} ".format(name, run, attack))
                 net = model
                 Results[name]['run_' + str(run)]['Pruning_step_' + str(step)][attack] = {}
@@ -183,7 +183,7 @@ for name in models:
                     model.get_structural_properties())
                 Results[name]['run_' + str(run)]['Pruning_step_' + str(step)][attack].update(
                     {'Accuracy': f1_score})
-                attacker = attacks[attack](args, Net=net)
+                attacker = attacks[attack](args, Net=net , logger=logger)
                 if args.cuda:
                     attacker.cuda()
 
