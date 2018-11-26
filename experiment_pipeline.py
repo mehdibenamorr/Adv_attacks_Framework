@@ -147,7 +147,7 @@ class Experiment(object):
                 graphs = generate_SNNs(self.params, self.args, self.kwargs, self.nb_SNNs, self.nodes, self.ks,self.ps)
                 #save generated graphs
                 torch.save(graphs, self.args.path + self.experiment +"/Generated_SNNS_graphs_{}.pkl".format(str(self.params)))
-            for idx ,(params, graph) in enumerate(graphs):
+            for idx, (params, graph) in enumerate(graphs):
                 self.Trained_models[self.experiment + "_" +
                                     str(params['nodes']) + "_" +
                                     str(params['k']) + "_" +
@@ -178,10 +178,10 @@ class Experiment(object):
                         snn.test(epoch)
                     snn.del_logger()
                     self.Trained_models[self.experiment + "_" +
-                                        str(snn.count_parameters()) + "_" +
-                                        str(snn.args.nodes) + "_" +
-                                        str(snn.args.k) + "_" +
-                                        str(snn.args.p)][method_name] = snn.best_state
+                                        str(params['nodes']) + "_" +
+                                        str(params['k']) + "_" +
+                                        str(params['p']) + "_graph_" +
+                                        str(idx)][method_name] = snn.best_state
             # save trained models
             torch.save(self.Trained_models , self.args.path + self.experiment +
                        "/Trained_SNNs_{}.pkl".format(str(self.params)))
