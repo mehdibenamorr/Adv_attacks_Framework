@@ -148,6 +148,11 @@ class Experiment(object):
                 #save generated graphs
                 torch.save(graphs, self.args.path + self.experiment +"/Generated_SNNS_graphs_{}.pkl".format(str(self.params)))
             for idx ,(params, graph) in enumerate(graphs):
+                self.Trained_models[self.experiment + "_" +
+                                    str(params['nodes']) + "_" +
+                                    str(params['k']) + "_" +
+                                    str(params['p']) + "_graph_" +
+                                    str(idx)] = {}
                 for init_func in init_functions:
                     method_name = list(init_func.keys())[0]
                     snn = SNN(args, kwargs, graph,
@@ -158,11 +163,7 @@ class Experiment(object):
                     if self.args.cuda:
                         snn.cuda()
                         cudnn.benchmark = True
-                    self.Trained_models[self.experiment + "_" +
-                                        str(snn.count_parameters()) + "_" +
-                                        str(snn.args.nodes) + "_" +
-                                        str(snn.args.k) + "_" +
-                                        str(snn.args.p)] = {}
+
                     # for i in range(self.N):
                     print("==> Training model.." + self.args.experiment + "_" +
                           str(snn.count_parameters()) + "_" +
@@ -197,7 +198,6 @@ class Experiment(object):
             for init_func in self.Trained_models[model].keys():
                 self.attacks_data[model][init_func]= {}
                 self.Results[model][init_func] = {}
-                Logger
                 for attack in self.attacks:
                     print("==> Attacking {} __ {} with {} ".format(model, init_func, attack))
                     self.Results[model][init_func][attack] = {}

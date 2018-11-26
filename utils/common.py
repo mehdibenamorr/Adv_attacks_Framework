@@ -128,7 +128,7 @@ def generate_SNNs(params_range, args, kwargs, nb=10, nodes=None, ks=None, ps=Non
                         if args.cuda: snn.cuda()
                         print("nodes:",str(node),"k: ",str(k),"p: ",str(p), "#params: ", str(snn.count_parameters()))
                         if snn.count_parameters() in params_range:
-                            params = {'nodes': node,'k': k,'p':p}
+                            params = {'nodes': node,'k': k,'p':p, '#params' : snn.count_parameters()}
                             graph_structures.append((params,snn.structure_graph()))
                             print("saved")
                             nb_SNNs+=1
@@ -138,7 +138,7 @@ def generate_SNNs(params_range, args, kwargs, nb=10, nodes=None, ks=None, ps=Non
             snn = SNN(args,kwargs)
             print("nodes:", str(args.nodes), "k: ", str(args.k), "p: ", str(args.p), "#params: ", str(snn.count_parameters()))
             if snn.count_parameters() in params_range:
-                params = {'nodes': args.nodes, 'k': args.k, 'p': args.p}
+                params = {'nodes': args.nodes, 'k': args.k, 'p': args.p ,'#params' : snn.count_parameters()}
                 graph_structures.append((params,snn.structure_graph()))
                 print("saved")
                 nb_SNNs += 1
