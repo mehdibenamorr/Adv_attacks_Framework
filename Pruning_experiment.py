@@ -216,7 +216,7 @@ for name in models:
 
 df = pd.DataFrame.from_dict(Results, orient='index')
 df.to_csv(path_to_results)
-with open("utils/adv_examples/" + Experiment + ".pkl", "wb") as f:
+with open("utils/adv_examples/" + Experiment + "_.pkl", "wb") as f:
     pickle.dump(attacks_data, f)
 
 
