@@ -38,6 +38,8 @@ parser.add('--saved_models', type=str, default="tests/results/Trained_FFNs",
 parser.add('--resume', '-r', action='store_true', help='resume training from checkpoint')
 parser.add('--save', action='store_true', help='save checkpoints when training')
 parser.add('--cuda', action='store_true', help='build the model on GPU')
+parser.add('--gpu', type=int, default=0,
+                    help='on which gpu to run (default: 0')
 parser.add('--log-interval', type=int, default=50,
                     help='how many batches to wait before logging training status')
 parser.add('--nodes', type=int, default=200,
@@ -74,6 +76,7 @@ torch.manual_seed(args.seed)
 kwargs = {'num_workers' : 4} if args.cuda else {}
 
 if args.cuda:
+    torch.cuda.set_device(args.gpu)
     torch.cuda.manual_seed(args.seed)
 
 init_functions = [{'xavier_normal': init.xavier_normal_, 'kwargs': {'gain': init.calculate_gain('relu')}}
