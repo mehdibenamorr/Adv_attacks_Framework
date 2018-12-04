@@ -114,7 +114,7 @@ else:
     print("This file was not found %s" % Trained_models)
     models = {}
     print("==> Building and Training models...")
-    for init_func in init_functions:
+    for init_func in init_functions[:10]:
         method_name = list(init_func.keys())[0]
         models[method_name] = []
         for i in range(N):
