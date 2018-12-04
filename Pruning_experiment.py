@@ -140,7 +140,7 @@ attacks_data = {}
 for name in models:
     Results[name] = {}
     attacks_data[name] = {}
-    for run, model in enumerate(models[name]):
+    for run, model in enumerate(models[name][:10]):
         Results[name]['run_'+str(run)] = {}
         attacks_data[name]['run' + str(run)] = {}
         logger = Logger('./logs/'+Experiment+'/'+name+'_run'+str(run)+'/pruning_steps') # TODO add logging
@@ -213,7 +213,8 @@ for name in models:
 
             step += 1
 
-
+import ipdb
+ipdb.set_trace()
 df = pd.DataFrame.from_dict(Results, orient='index')
 df.to_csv(path_to_results)
 with open("utils/adv_examples/" + Experiment + "_.pkl", "wb") as f:
