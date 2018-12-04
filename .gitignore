@@ -4,6 +4,7 @@ __pycache__/
 # Local files
 logs/
 data/*
+plots/*
 .utils/adv_examples/*
 
 
@@ -16,4 +17,5 @@ data/*
 *.ckpt
 *.csv
 *.html
+*.jpg
 gen_graph.py

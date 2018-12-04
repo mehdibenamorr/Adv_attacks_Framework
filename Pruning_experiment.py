@@ -34,6 +34,10 @@ parser.add('--experiment', type=str, default="SNN_pruning_experiment",
                     help='the name of the experiment (default: SNN_pruning_experiment)')
 parser.add('--path', type=str, default="tests/results/",
                     help='path to save the results (default: tests/results/)')
+parser.add('--pruning', type=str, default="random",
+                    help='pruning method (default: random)')
+parser.add('--alpha', type=float, default=0.1,
+                    help='parameter of the pruning (default: 0.1)')
 parser.add('--saved_models', type=str, default="tests/results/Trained_models_pruning.pkl",
                     help='path to saved trained models (default: tests/results/Trained_models_pruning.pkl)')
 parser.add('--resume', '-r', action='store_true', help='resume training from checkpoint')
@@ -82,8 +86,8 @@ if args.cuda:
 
 
 #Experiment Hyper parameters
-Experiment = 'Pruning_experiment'
-N = 20 #number of repetitions
+Experiment = 'Random_pruning_experiment'
+N = 10 #number of repetitions
 attacks_ = ['FGSM', 'One_Pixel']
 path_to_results = args.path + Experiment + '/pruning_experiment.csv'
 Trained_models = args.saved_models
@@ -128,8 +132,8 @@ else:
 
 
 # Pruning, Training, updating, evaluating robustness for each attack along with computing structural properties
-import ipdb
-ipdb.set_trace()
+# import ipdb
+# ipdb.set_trace()
 Pruning_steps = 10
 Results = {}
 attacks_data = {}
@@ -146,8 +150,10 @@ for name in models:
         while step < Pruning_steps:
             Results[name]['run_' + str(run)]['Pruning_step_'+str(step)] = {}
             attacks_data[name]['run' + str(run)] ['Pruning_step_'+str(step)] = {}
-
-            model.prune(1)
+            if args.pruning == 'magnitude':
+                model.prune(args.alpha)
+            else:
+                model.prune_random(args.alpha)
             print('Pruning step {}'.format(step))
             print('previously pruned : {:.3f}%'.format(100*pruned_pct))
             print('number_pruned: {:.3f}%'.format(100*(model.num_pruned/model.num_weights)))
@@ -170,7 +176,6 @@ for name in models:
                 print('Retraining epoch {} : F1_score : {:.5f} % '.format(
                     e,100*f1_score
                 ))
-
 
             f1_score= model.validate()
             # evaluate Robustness (FGSM, FGSM_eps, One_Pixel)

@@ -6,7 +6,7 @@ saved_models = tests/results/Pruning_experiment/Trained_models_pruning.pkl
 [Model training Parameters]
 batch-size = 128
 test-batch-size = 100
-epochs = 30
+epochs = 10
 lr = 0.001
 momentum = 0.9
 weight_decay = 1e-04
@@ -16,10 +16,10 @@ cuda = True
 
 
 [Experiment]
-experiment = Pruning_experiment
+experiment = Random_pruning_experiment
 path = tests/results/
-pruning = magnitude
-alpha = 1
+pruning = random
+alpha = 0.2
 
 [Logging]
 log-interval = 128

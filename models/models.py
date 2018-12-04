@@ -262,6 +262,17 @@ class CNN(Net):
 
 class Layer(nn.Module):
     def __init__(self, in_dims, out_dim, vertices, predecessors, cuda, init_method, bias=True,  **kwargs):
+        """
+
+        :param in_dims:
+        :param out_dim:
+        :param vertices:
+        :param predecessors:
+        :param cuda:
+        :param init_method:
+        :param bias:
+        :param kwargs:
+        """
         super(Layer,self).__init__()
         self.in_dims = in_dims
         self.out_dim = out_dim
@@ -414,9 +425,11 @@ class SNN(Net):
         self._structural_properties['#edges'] = self._structure_graph.ecount() # excluding connections from input and output layers
         self._structural_properties['avg_path_length'] = self._structure_graph.average_path_length() # average geodesic length
         self._structural_properties['diameter'] = self._structure_graph.diameter() #longest geodesic
+        self._structural_properties['eccentricity_distribution'] = self._structure_graph.eccentricity()
         self._structural_properties['avg_eccentricity'] = mean(self._structure_graph.eccentricity())
         self._structural_properties['avg_betweenness'] = mean(self._structure_graph.betweenness())
         self._structural_properties['avg_closeness'] = mean(self._structure_graph.closeness())
+        self._structural_properties['closeness_distribution'] = self._structure_graph.closeness()
         self._structural_properties['radius'] = self._structure_graph.radius()
         self._structural_properties['avg_edge_betweenness'] = mean(self._structure_graph.edge_betweenness())
         self._structural_properties['degree_distribution'] = self._structure_graph.degree() #degree distribution
@@ -441,7 +454,10 @@ class SNN(Net):
             weight = module.weights[-1].mul(module.w_masks[-1])
             weight_num = torch.numel(weight.data)
             weight_mask = torch.ge(weight.data.abs(), alpha * weight.data.std()).type('torch.FloatTensor')
-            bias_mask = torch.ones(module.bias.data.size())
+            if len(self.bias_masks) <= self.index:
+                bias_mask = torch.ones(module.bias.data.size())
+            else:
+                bias_mask = self.bias_masks[self.index]
             if self.args.cuda:
                 weight_mask = weight_mask.cuda()
                 bias_mask = bias_mask.cuda()
@@ -462,6 +478,8 @@ class SNN(Net):
             self.index += 1
 
             # TODO transfer these mask to the graph structure outside of the prune function
+            module.w_masks[-1] = weight_mask
+            module.bias_mask = bias_mask
             deleted_connections = (weight_mask == 0).nonzero().data.cpu().numpy()
             for e in deleted_connections:
                 try:
@@ -479,9 +497,91 @@ class SNN(Net):
 
             layer_pruned = weight_num - torch.nonzero(weight_mask).size(0)
             print("{} pruned weights of layer {}".format(100*(layer_pruned/weight_num), self.index))
-            bias_num = torch.numel(module.bias.data)
+            bias_num = torch.nonzero(module.bias.data).size(0)
             bias_pruned = bias_num - torch.nonzero(bias_mask).size(0)
             print("{} pruned biases of layer {}".format(100*(bias_pruned/bias_num), self.index))
+
+            if self.index not in self.pruned_book.keys():
+                self.pruned_book[self.index] = [100*layer_pruned/weight_num]
+            else:
+                self.pruned_book[self.index].append(100*layer_pruned/weight_num)
+
+            self.num_pruned += layer_pruned
+            self.num_weights += weight_num
+
+            module.weights[-1].data *= weight_mask
+            module.bias.data *= bias_mask
+
+    def prune_random(self, n = 0.2):
+        """
+
+        :param n: % percentage of weights to prune randomly from each layer
+        :return:
+        """
+        self.index = 0
+        self.num_pruned = 0
+        self.num_weights = 0
+        self.n = n
+        vertex_by_layers = layer_indexing(self._structure_graph)
+        for l, module in enumerate(self.layers):
+            weight = module.weights[-1].mul(module.w_masks[-1])
+            weight_num = torch.numel(weight.data)
+            # weight_mask = torch.ge(weight.data.abs(), alpha * weight.data.std()).type('torch.FloatTensor')
+            if len(self.weight_masks) <= self.index:
+                weight_mask = torch.ones(weight.data.size())
+                bias_mask = torch.ones(module.bias.data.size())
+            else:
+                weight_mask = self.weight_masks[self.index]
+                bias_mask = self.bias_masks[self.index]
+            # numpy random choice method to randomnly prune n weigths
+            idx = weight_mask.nonzero()
+
+            n_w = len(idx) - int(len(idx)*n)
+            weight_mask[np.random.choice(idx[:,0], len(idx)- n_w, replace=False),
+                        np.random.choice(idx[:,1], len(idx)- n_w, replace=False)] = 0
+
+            if self.args.cuda:
+                weight_mask = weight_mask.cuda()
+                bias_mask = bias_mask.cuda()
+
+            if len(self.weight_masks) <= self.index:
+                self.weight_masks.append(weight_mask)
+            else:
+                self.weight_masks[self.index] = weight_mask
+
+            for i in range(bias_mask.size(0)):
+                if len(torch.nonzero(weight_mask[i]).size()) == 0:
+                    bias_mask[i] = 0
+            if len(self.bias_masks) <= self.index:
+                self.bias_masks.append(bias_mask)
+            else:
+                self.bias_masks[self.index] = bias_mask
+
+            self.index += 1
+
+            # TODO transfer these mask to the graph structure outside of the prune function
+            module.w_masks[-1] = weight_mask
+            module.bias_mask = bias_mask
+            deleted_connections = (weight_mask == 0).nonzero().data.cpu().numpy()
+            for e in deleted_connections:
+                try:
+                    self._structure_graph.delete_edges(self._structure_graph.get_eid(vertex_by_layers[l][e[1]].index,
+                                                                                 vertex_by_layers[l+1][e[0]].index))
+                except igraph._igraph.InternalError:
+                    pass
+
+            for n in (bias_mask==0).nonzero().data.cpu().numpy():
+                if vertex_by_layers[l+1][n[0]].outdegree() == 0:
+                    try:
+                        self._structure_graph.delete_vertices(vertex_by_layers[l+1][n[0]].index)
+                    except igraph._igraph.InternalError:
+                        pass
+
+            layer_pruned = weight_num - torch.nonzero(weight_mask).size(0)
+            print("{}% pruned weights of layer {}".format(100*(layer_pruned/weight_num), self.index))
+            bias_num = torch.numel(module.bias.data)
+            bias_pruned = bias_num - torch.nonzero(bias_mask).size(0)
+            print("{}% pruned biases of layer {}".format(100*(bias_pruned/bias_num), self.index))
 
             if self.index not in self.pruned_book.keys():
                 self.pruned_book[self.index] = [100*layer_pruned/weight_num]
@@ -508,8 +608,7 @@ class SNN(Net):
             y_trues += target.tolist()
             if self.args.cuda:
                 data, target = data.cuda(), target.cuda()
-            with torch.no_grad():
-                data, target = Variable(data), Variable(target)
+            data, target = Variable(data), Variable(target)
             self.optimizer.zero_grad()
             output = self.forward(data)
             loss = self.SoftmaxWithXent(output, target)
