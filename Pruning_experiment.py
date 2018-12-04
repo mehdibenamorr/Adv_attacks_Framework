@@ -86,7 +86,7 @@ if args.cuda:
 
 
 #Experiment Hyper parameters
-Experiment = 'Random_pruning_experiment'
+Experiment = args.experiment
 N = 10 #number of repetitions
 attacks_ = ['FGSM', 'One_Pixel']
 path_to_results = args.path + Experiment + '/pruning_experiment.csv'
