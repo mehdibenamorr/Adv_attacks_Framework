@@ -1,6 +1,6 @@
 [Model parameters]
 layers = 3
-saved_models = tests/results/Pruning_experiment/Trained_models_pruning.pkl
+saved_models = tests/results/Pruning_experiment/Trained_models_pruning_gpu_1.pkl
 
 
 [Model training Parameters]
