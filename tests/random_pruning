@@ -26,6 +26,7 @@ log-interval = 128
 
 [torch parameters]
 seed = 1
+gpu = 1
 
 [Adversarial attack parameters]
 method = FGSM
