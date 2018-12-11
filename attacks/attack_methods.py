@@ -125,6 +125,8 @@ class FGSM(Attack):
         print('\nTotal misclassified adversarial examples : {} out of {}\nSuccess_Rate is {:.3f}%  espsilon : {}'.format(
             Adv_misclassification, correct,
             100. * Adv_misclassification / correct ,self.epsilon))
+        print("Avg_conf : {:.3f}% ; Max_conf : {:.3f}%".format(np.mean(adversarial_confidences) * 100
+                                                               , np.max(adversarial_confidences) * 100))
         adv_dta_dict = {
             "xs": xs_clean,
             "y_trues": y_trues_clean,
@@ -228,6 +230,7 @@ class FGSM(Attack):
             "Max_epsilon": np.max(epsilons),
             "Min_epsilon": np.min(epsilons),
             "Success_Rate": 100. * Adv_misclassification / correct,
+            "epsilons": epsilons,
             "model_acc": self.best_acc
         }
         # with open("utils/adv_examples/FGSM_"+str(self.epsilon) + "_" + self.args.config_file.split('/')[1] + ".pkl", "wb") as f:
@@ -325,6 +328,8 @@ class One_Pixel(Attack):
         print('\nTotal misclassified adversarial examples : {}/{} \nSuccess_Rate is {:.3f}%'.format(
             Adv_misclassification,correct,
             100. * success_rate))
+        print("Avg_conf : {:.3f}% ; Max_conf : {:.3f}%".format(np.mean(adversarial_confidences)*100
+                                                               ,np.max(adversarial_confidences)*100))
 
 
 

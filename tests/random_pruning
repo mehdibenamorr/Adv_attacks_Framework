@@ -6,7 +6,7 @@ saved_models = tests/results/Pruning_experiment/Trained_models_pruning_gpu_1.pkl
 [Model training Parameters]
 batch-size = 128
 test-batch-size = 100
-epochs = 10
+epochs = 30
 lr = 0.001
 momentum = 0.9
 weight_decay = 1e-04

@@ -18,7 +18,7 @@ parser.add('--batch-size', type=int, default=128,
                     help='input batch size for training (default: 128)')
 parser.add('--test-batch-size', type=int, default=100,
                     help='input batch size for testing (default: 100)')
-parser.add('--epochs', type=int, default=15,
+parser.add('--epochs', type=int, default=20,
                     help='number of epochs to train (default: 100)')
 parser.add('--lr', type=float, default=0.001,
                     help='learning rate (default: 0.001)')

@@ -94,7 +94,7 @@ class Experiment(object):
         self.kwargs = kwargs
         self.experiment = experiment
         self.attacks = ['FGSM','One_Pixel']
-        self.path_to_results = path + experiment + "/"+ experiment + ".csv"
+        self.path_to_results = path + experiment + "/"+ experiment
         self.nodes = [150, 200, 250, 300, 350, 400, 500]  # for FFN experiment
         self.ks = [2,4,6,8,10,20]
         self.ps = [0.5,0.6,0.7,0.8,0.9]
@@ -192,17 +192,20 @@ class Experiment(object):
 
     def attack_models(self):
         # Attack all trained models and store the results
-        self.Results = {}
-        self.attacks_data = {}
+        import time
 
-        for model in self.Trained_models.keys():
+        for i, model in enumerate(self.Trained_models.keys()):
+            self.Results = {}
+            self.attacks_data = {}
+            models_time = time.time()
             self.attacks_data[model] = {}
             self.Results[model] = {}
             for init_func in self.Trained_models[model].keys():
+                model_time = time.time()
                 self.attacks_data[model][init_func]= {}
                 self.Results[model][init_func] = {}
                 for attack in self.attacks:
-                    print("==> Attacking {} __ {} with {} ".format(model, init_func, attack))
+                    print("==> Attacking {}_{} __ {} with {} ".format(model,i, init_func, attack))
                     self.Results[model][init_func][attack] = {}
                     net = self.Trained_models[model][init_func]['model']
                     self.Results[model][init_func][attack].update(net.get_structural_properties())
@@ -224,19 +227,21 @@ class Experiment(object):
                                                                    'Avg_confidence': np.mean(dta['Confidences']),
                                                                    'Max_confidence': np.max(dta['Confidences']),
                                                                    'Accuracy': net.best_acc})
+                print("Attacking a model took {} minutes".format((time.time()-model_time)/60.))
+            print("Attacking 6 models of one graph took {} minutes".format((time.time()-models_time)/60.))
+            # Intermediate backup of results for every graph
+            df = pd.DataFrame.from_dict(self.Results, orient='index')
+            import ipdb
+            ipdb.set_trace()
+            df.to_csv(self.path_to_results + "_"+ model + ".csv")
+            with open("utils/adv_examples/" + self.experiment + str(self.params) + ".pkl", "wb") as f:
+                pickle.dump(self.attacks_data, f)
 
-        df = pd.DataFrame.from_dict(self.Results, orient='index')
-        df.to_csv(self.path_to_results)
-        with open("utils/adv_examples/"+ self.experiment + str(self.params)+ ".pkl","wb") as f:
-            pickle.dump(self.attacks_data, f)
-        return df
 
 # models = args.saved_models
 
 
 exp = Experiment(args,kwargs, args.experiment, args.path)
 exp.load_models()
-import ipdb
-ipdb.set_trace()
 results = exp.attack_models()
 

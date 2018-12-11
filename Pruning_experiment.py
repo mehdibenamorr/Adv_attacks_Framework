@@ -92,7 +92,7 @@ if args.cuda:
 Experiment = args.experiment
 N = 10 #number of repetitions
 attacks_ = ['FGSM', 'One_Pixel']
-path_to_results = args.path + Experiment + '/pruning_experiment.csv'
+path_to_results = args.path + Experiment + '/pruning_experiment'
 Trained_models = args.saved_models
 
 
@@ -137,91 +137,122 @@ else:
 # Pruning, Training, updating, evaluating robustness for each attack along with computing structural properties
 # import ipdb
 # ipdb.set_trace()
-Pruning_steps = 10
-Results = {}
-attacks_data = {}
-for name in models:
-    Results[name] = {}
-    attacks_data[name] = {}
-    for run, model in enumerate(models[name][:10]):
-        Results[name]['run_'+str(run)] = {}
-        attacks_data[name]['run' + str(run)] = {}
-        logger = Logger('./logs/'+Experiment+'/'+name+'_run'+str(run)+'/pruning_steps') # TODO add logging
-        step = 0
-        epochs = 10
-        pruned_pct = 0
-        while step < Pruning_steps:
-            Results[name]['run_' + str(run)]['Pruning_step_'+str(step)] = {}
-            attacks_data[name]['run' + str(run)] ['Pruning_step_'+str(step)] = {}
-            if args.pruning == 'magnitude':
-                model.prune(args.alpha)
-            else:
-                model.prune_random(args.alpha)
-            print('Pruning step {}'.format(step))
-            print('previously pruned : {:.3f}%'.format(100*pruned_pct))
-            print('number_pruned: {:.3f}%'.format(100*(model.num_pruned/model.num_weights)))
+import time
+Pruning_steps = 20
+N=0
+while N < 10:
+    Results = {}
+    attacks_data = {}
+    models_time = time.time()
+    for name in models:
+        model_time = time.time()
+        Results[name] = {}
+        attacks_data[name] = {}
+        for model in models[name][N:N-1]:
+            run = N
+            Results[name]['run_'+str(run)] = {}
+            attacks_data[name]['run' + str(run)] = {}
+            logger = Logger('./logs/'+Experiment+'/'+name+'_run'+str(run)+'/pruning_steps') # TODO add logging
+            step = 0
+            epochs = 10
+            pruned_pct = 0
+            stop = False
+            while (step < Pruning_steps) and not stop:
+                Results[name]['run_' + str(run)]['Pruning_step_'+str(step)] = {}
+                attacks_data[name]['run' + str(run)] ['Pruning_step_'+str(step)] = {}
+                if args.pruning == 'magnitude':
+                    model.prune(args.alpha)
+                else:
+                    model.prune_random(args.alpha)
+                print('Pruning step {}'.format(step))
+                print('previously pruned : {:.3f}%'.format(100*pruned_pct))
+                print('number_pruned: {:.3f}%'.format(100*(model.num_pruned/model.num_weights)))
+                print('newly_pruned : {:.3f}%'.format(100*(model.num_pruned/model.num_weights - pruned_pct)))
 
-            new_pruned = model.num_pruned / model.num_weights - pruned_pct
-            pruned_pct = model.num_pruned/model.num_weights
-            f1_score = model.validate()
+                new_pruned = model.num_pruned / model.num_weights - pruned_pct
+                pruned_pct = model.num_pruned/model.num_weights
+                f1_score = model.validate()
 
-            model.stats['num_pruned'].append(pruned_pct)
-            model.stats['new_pruned'].append(new_pruned)
-            model.stats['f1_score'].append(f1_score)
+                model.stats['num_pruned'].append(pruned_pct)
+                model.stats['new_pruned'].append(new_pruned)
+                model.stats['f1_score'].append(f1_score)
 
-            model.structural_properties()
+                model.structural_properties()
+                print('model weights : {}'.format(model.count_parameters()))
 
-            #Retraining
-            for e in range(epochs):
-                model.train_pruned()
-                f1_score= model.validate()
+                #Retraining
+                for e in range(epochs):
+                    model.train_pruned()
+                    f1_score= model.validate()
 
-                print('Retraining epoch {} : F1_score : {:.5f} % '.format(
-                    e,100*f1_score
-                ))
+                    print('Retraining epoch {} : F1_score : {:.5f} % '.format(
+                        e,100*f1_score
+                    ))
 
-            f1_score= model.validate()
-            # evaluate Robustness (FGSM, FGSM_eps, One_Pixel)
-            # TODO
-            for attack in attacks_:
-                print("==> Attacking {} __ run {} with {} ".format(name, run, attack))
-                net = model
-                Results[name]['run_' + str(run)]['Pruning_step_' + str(step)][attack] = {}
-                Results[name]['run_' + str(run)]['Pruning_step_' + str(step)][attack].update(
-                    model.get_structural_properties())
-                Results[name]['run_' + str(run)]['Pruning_step_' + str(step)][attack].update(
-                    {'Accuracy': f1_score})
-                attacker = attacks[attack](args, Net=net , logger=logger)
-                if args.cuda:
-                    attacker.cuda()
+                # Log values and gradients of the parameters (histogram summary) after each pruning step
+                for tag, value in model.named_parameters():
+                    tag = tag.replace('.', '/')
+                    # import ipdb
+                    # ipdb.set_trace()
+                    logger.histo_summary(tag, value.data.cpu().numpy(), step + 1)
+                    try:
+                        logger.histo_summary(tag + '/grad', value.grad.data.cpu().numpy(), step + 1)
+                    except AttributeError:
+                        print('No gradient data for this parameter')
 
-                dta = attacker.attack()
-                attacks_data[name]['run' + str(run)]['Pruning_step_' + str(step)][attack] = dta
-                Results[name]['run_' + str(run)]['Pruning_step_' + str(step)][attack].update(
-                    {'Robustness': dta['Success_Rate'],
-                     'Avg_confidence': np.mean(dta['Confidences']),
-                     'Max_confidence': np.max(dta['Confidences'])})
-                if attack == 'FGSM':
-                    dta_ep = attacker.attack_eps()
-                    attacks_data[name]['run' + str(run)]['Pruning_step_' + str(step)]['FGSM_eps'] = dta_ep
+                # evaluate Robustness (FGSM, FGSM_eps, One_Pixel)
+                for attack in attacks_:
+                    print("==> Attacking {} __ run {} with {} ".format(name, run, attack))
+                    net = model
+                    Results[name]['run_' + str(run)]['Pruning_step_' + str(step)][attack] = {}
                     Results[name]['run_' + str(run)]['Pruning_step_' + str(step)][attack].update(
-                        {'Avg_epsilon': dta_ep['Avg_epsilon'],
-                         'Max_epsilon': dta_ep['Max_epsilon'],
-                         'Min_epsilon': dta_ep['Min_epsilon']})
+                        model.get_structural_properties())
+                    Results[name]['run_' + str(run)]['Pruning_step_' + str(step)][attack].update(
+                        {'Accuracy': f1_score , 'Num_pruned': pruned_pct, 'New_pruned' : new_pruned})
+                    attacker = attacks[attack](args, Net=net , logger=logger)
+                    if args.cuda:
+                        attacker.cuda()
 
-            # Stopping criterion
-            if new_pruned <= 0.001:  # weights are not prunable anymore due to their distribution being more around the std
-                print('Stopping pruning...')
-                break
+                    dta = attacker.attack()
+                    attacks_data[name]['run' + str(run)]['Pruning_step_' + str(step)][attack] = dta
+                    Results[name]['run_' + str(run)]['Pruning_step_' + str(step)][attack].update(
+                        {'Robustness': dta['Success_Rate'],
+                         'Avg_confidence': np.mean(dta['Confidences']),
+                         'Max_confidence': np.max(dta['Confidences'])})
+                    if attack == 'FGSM':
+                        dta_ep = attacker.attack_eps()
+                        attacks_data[name]['run' + str(run)]['Pruning_step_' + str(step)]['FGSM_eps'] = dta_ep
+                        Results[name]['run_' + str(run)]['Pruning_step_' + str(step)][attack].update(
+                            {'Avg_epsilon': dta_ep['Avg_epsilon'],
+                             'Max_epsilon': dta_ep['Max_epsilon'],
+                             'Min_epsilon': dta_ep['Min_epsilon']})
 
-            step += 1
+                # Stopping criterion
+                if new_pruned <= 0.001:
+                    print('stopping pruning')
+                    stop = True
 
-import ipdb
-ipdb.set_trace()
-df = pd.DataFrame.from_dict(Results, orient='index')
-df.to_csv(path_to_results)
-with open("utils/adv_examples/" + Experiment + "_gpu_"+ str(args.gpu) +".pkl", "wb") as f:
-    pickle.dump(attacks_data, f)
+                step += 1
+        print("Attacking this model took {} minutes".format((time.time()-model_time)/60.))
+    print("Attacking all models for one run took {}".format((time.time()-models_time)/60.))
+
+    df = pd.DataFrame.from_dict(Results, orient='index')
+    import ipdb
+    ipdb.set_trace()
+    df.to_csv(path_to_results+'_run_'+str(N)+'.csv')
+    with open("utils/adv_examples/" + Experiment + "_gpu_" + str(args.gpu) + "_run_"+str(N)+".pkl", "wb") as f:
+        pickle.dump(attacks_data, f)
+
+    N += 1
+
+
+
+# import ipdb
+# ipdb.set_trace()
+# df = pd.DataFrame.from_dict(Results, orient='index')
+# df.to_csv(path_to_results)
+# with open("utils/adv_examples/" + Experiment + "_gpu_"+ str(args.gpu) +".pkl", "wb") as f:
+#     pickle.dump(attacks_data, f)
 
 
 

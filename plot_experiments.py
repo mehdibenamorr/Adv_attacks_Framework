@@ -11,7 +11,7 @@ from scipy.stats import norm
 style = {"figure.figsize": (7.25 , 5.43),
          "figure.titlesize" : 11,
          "legend.frameon": False,
-         "legend.loc" : 'upper right',
+         "legend.loc" : 'upper left',
          "legend.fontsize" : 11,
          "axes.labelsize" : 11,
          "savefig.bbox" : 'tight',
@@ -53,17 +53,19 @@ def impl_just():
 
     #plot a subplot containing implementation experiment distribution for both density and counts histograms
     # Cut the window in 2 parts
-    f, (ax_box, ax_hist) = plt.subplots(2,  gridspec_kw={"height_ratios": (.15, .85)})
+    f, (ax_box, ax_hist) = plt.subplots(2,  sharex=True,gridspec_kw={"height_ratios": (.20, .80)},figsize=(3.54,2.65))
     # f.suptitle('Implementation Validation for 784-100-100-10 \n Performance differences distribution')
     # Add a graph in each part
-    sns.boxplot(df['acc_diff'] , ax=ax_box)
-    sns.distplot(df['acc_diff'], ax=ax_hist, kde_kws={'label' : 'kernel density estimate', 'color' : '#ffa756'}, hist_kws={'edgecolor': 'black'})
+    sns.boxplot(df['acc_diff'] , ax=ax_box, width=0.4)
+    sns.distplot(df['acc_diff'], ax=ax_hist, kde_kws={'label' : 'KDE', 'color' : '#ffa756'}, hist_kws={'edgecolor': 'black'})
     sns.distplot(df['acc_diff'],fit=norm,hist=False, kde=False , ax=ax_hist,
-                 label='PDF estimate', fit_kws={'linestyle' : '--'})
+                 label='PDF', fit_kws={'linestyle' : '--'})
 
-    ax_hist.set(xlabel='Accuracy difference in $(\%)$',ylabel='Density')
+    ax_hist.set(xlabel='F1 scores difference in $(\%)$',ylabel='Density')
     # Remove x axis name for the boxplot
     ax_box.set(xlabel='')
+    plt.setp(ax_box.artists, edgecolor='k', facecolor='w')
+    plt.setp(ax_box.lines, color='k')
     plt.legend()
     # f.savefig(plots_path + 'Impl_validation_784_100_100_10.jpg')
     f.savefig(plots_path + 'Impl_validation_784_100_100_10.svg')
@@ -71,17 +73,19 @@ def impl_just():
 
 
     #second exp
-    f, (ax_box, ax_hist) = plt.subplots(2,  gridspec_kw={"height_ratios": (.15, .85)})
+    f, (ax_box, ax_hist) = plt.subplots(2,  sharex=True,gridspec_kw={"height_ratios": (.20, .80)}, figsize=(3.54,2.65))
     # f.suptitle('Implementation Validation for 784-100-10 \n Performance differences distribution')
     # Add a graph in each part
-    sns.boxplot(df1['acc_diff'], ax=ax_box)
-    sns.distplot(df1['acc_diff'], ax=ax_hist, kde_kws={'label' : 'kernel density estimate', 'color' : '#ffa756'},hist_kws={'edgecolor': 'black'})
+    sns.boxplot(df1['acc_diff'], ax=ax_box, width=0.4)
+    sns.distplot(df1['acc_diff'], ax=ax_hist, kde_kws={'label' : 'KDE', 'color' : '#ffa756'},hist_kws={'edgecolor': 'black'})
     sns.distplot(df1['acc_diff'], fit=norm, hist=False, kde=False, ax=ax_hist,
-                 label='PDF estimate',fit_kws={'linestyle' : '--'})
+                 label='PDF',fit_kws={'linestyle' : '--'})
 
-    ax_hist.set(xlabel='Accuracy difference in $(\%)$', ylabel='Density')
+    ax_hist.set(xlabel='F1 scores difference in $(\%)$', ylabel='Density')
     # Remove x axis name for the boxplot
     ax_box.set(xlabel='')
+    plt.setp(ax_box.artists, edgecolor='k', facecolor='w')
+    plt.setp(ax_box.lines, color='k')
     plt.legend()
     # f.savefig(plots_path + 'Impl_validation_784_100_10.jpg')
     f.savefig(plots_path + 'Impl_validation_784_100_10.svg')
@@ -89,26 +93,30 @@ def impl_just():
 
     #both performances boxplots
     dff= df
-    dff.columns = ['Linear_module', 'SNN_module', 'acc_diff']
-    f, ax = plt.subplots(1)
+    dff.columns = ['Linear', 'Graph Based', 'acc_diff']
+    f, ax = plt.subplots(1, figsize=(3,4))
     # f.suptitle('Accuracy boxplot of the two algorithms used \n for the 784_100_10 network')
-    sns.boxplot(data= dff[['Linear_module','SNN_module']], ax=ax, palette="Set2", width=0.3)
-    ax.set(xlabel='Module used', ylabel='Accuracy')
+    sns.boxplot(data= dff[['Linear','Graph Based']], ax=ax, color="w", width=0.3)
+    ax.set(xlabel='Method used', ylabel='F1 score')
+    plt.setp(ax.artists, edgecolor='k', facecolor='w')
+    plt.setp(ax.lines, color='k')
     f.savefig(plots_path + 'Boxplot_Impl_validation_784_100_10.svg')
     f.savefig(plots_path + 'Boxplot_Impl_validation_784_100_10.pdf')
 
     #second exp
     dff = df1
-    dff.columns = ['Linear_module', 'SNN_module', 'acc_diff']
-    f, ax = plt.subplots(1)
+    dff.columns = ['Linear', 'Graph Based', 'acc_diff']
+    f, ax = plt.subplots(1, figsize=(3,4))
     # f.suptitle('Accuracy boxplot of the two algorithms used \n for the 784_100_10 network')
-    sns.boxplot(data=dff[['Linear_module', 'SNN_module']], ax=ax, palette="Set2", width=0.3)
-    ax.set(xlabel='Module used', ylabel='Accuracy')
+    sns.boxplot(data=dff[['Linear', 'Graph Based']], ax=ax, color="w", width=0.3)
+    ax.set(xlabel='Method used', ylabel='F1 score')
+    plt.setp(ax.artists, edgecolor='k', facecolor='w')
+    plt.setp(ax.lines, color='k')
     f.savefig(plots_path + 'Boxplot_Impl_validation_784_100_100_10.svg')
     f.savefig(plots_path + 'Boxplot_Impl_validation_784_100_100_10.pdf')
 
 
-# impl_just()
+impl_just()
 
 def ffn_experiment():
     #FGSM 1Layer experiment
@@ -141,6 +149,6 @@ def snn_experiment():
 def pruning_experiment():
     pass
 
-ffn_experiment()
+# ffn_experiment()
 
 # plt.show()
