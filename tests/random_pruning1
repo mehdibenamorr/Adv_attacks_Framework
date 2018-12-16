@@ -1,0 +1,42 @@
+[Model parameters]
+layers = 4
+saved_models = tests/results/Pruning_experiment/Trained_models_pruning_gpu_1_4layers.pkl
+
+
+[Model training Parameters]
+batch-size = 128
+test-batch-size = 100
+epochs = 30
+lr = 0.001
+momentum = 0.9
+weight_decay = 1e-04
+resume = False
+save = False
+cuda = True
+
+
+[Experiment]
+experiment = Random_pruning_experiment4
+path = tests/results/
+pruning = random
+alpha = 0.2
+
+[Logging]
+log-interval = 128
+
+[torch parameters]
+seed = 1
+gpu = 1
+
+[Adversarial attack parameters]
+method = FGSM
+epsilon= 0.1
+
+norm = l2
+max_iter = 500
+pixels= 1
+popsize = 500
+samples = 100
+targeted = False
+
+V = False #visulaize adversarial examples
