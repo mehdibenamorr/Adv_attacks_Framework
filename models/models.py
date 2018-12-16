@@ -567,14 +567,14 @@ class SNN(Net):
                 try:
                     self._structure_graph.delete_edges(self._structure_graph.get_eid(vertex_by_layers[l][e[1]].index,
                                                                                  vertex_by_layers[l+1][e[0]].index))
-                except igraph._igraph.InternalError:
+                except igraph._igraph.InternalError or IndexError:
                     pass
 
             for n in (bias_mask==0).nonzero().data.cpu().numpy():
                 if vertex_by_layers[l+1][n[0]].outdegree() == 0:
                     try:
                         self._structure_graph.delete_vertices(vertex_by_layers[l+1][n[0]].index)
-                    except igraph._igraph.InternalError:
+                    except igraph._igraph.InternalError or IndexError:
                         pass
 
             layer_pruned = weight_num - torch.nonzero(weight_mask).size(0)
