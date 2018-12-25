@@ -231,8 +231,7 @@ class Experiment(object):
             print("Attacking 6 models of one graph took {} minutes".format((time.time()-models_time)/60.))
             # Intermediate backup of results for every graph
             df = pd.DataFrame.from_dict(self.Results, orient='index')
-            import ipdb
-            ipdb.set_trace()
+
             df.to_csv(self.path_to_results + "_"+ model + ".csv")
             with open("utils/adv_examples/" + self.experiment + str(self.params) + ".pkl", "wb") as f:
                 pickle.dump(self.attacks_data, f)

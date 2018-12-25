@@ -321,7 +321,11 @@ class One_Pixel(Attack):
                         self._logger.image_summary(tag, image, Adv_misclassification)
 
             if correct == self.args.samples:
-                break
+                try:
+                    break
+                except ConnectionResetError:
+                    break
+
 
         success_rate = Adv_misclassification / correct
         print("Total misclassifications: ", totalMisclassification, " out of :", self.args.samples)

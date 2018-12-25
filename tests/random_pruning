@@ -1,6 +1,6 @@
 [Model parameters]
 layers = 3
-saved_models = tests/results/Pruning_experiment/Trained_models_pruning_gpu_1.pkl
+saved_models = tests/results/Pruning_experiment/Trained_models_pruning_gpu_0.pkl
 
 
 [Model training Parameters]
@@ -26,7 +26,7 @@ log-interval = 128
 
 [torch parameters]
 seed = 1
-gpu = 1
+gpu = 0
 
 [Adversarial attack parameters]
 method = FGSM

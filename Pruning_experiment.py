@@ -154,7 +154,7 @@ while N < 10:
             attacks_data[name]['run' + str(run)] = {}
             logger = Logger('./logs/'+Experiment+'/'+name+'_run'+str(run)+'/pruning_steps') # TODO add logging
             step = 0
-            epochs = 10
+            epochs = 2
             pruned_pct = 0
             stop = False
             while (step < Pruning_steps) and not stop:
@@ -233,12 +233,12 @@ while N < 10:
                     stop = True
 
                 step += 1
+        df1 = pd.DataFrame.from_dict(Results[name], orient='index')
+        df1.to_csv(path_to_results + '_'+ name + '_run_' + str(N)+'.csv')
         print("Attacking this model took {} minutes".format((time.time()-model_time)/60.))
     print("Attacking all models for one run took {}".format((time.time()-models_time)/60.))
 
     df = pd.DataFrame.from_dict(Results, orient='index')
-    import ipdb
-    ipdb.set_trace()
     df.to_csv(path_to_results+'_run_'+str(N)+'.csv')
     with open("utils/adv_examples/" + Experiment + "_gpu_" + str(args.gpu) + "_run_"+str(N)+".pkl", "wb") as f:
         pickle.dump(attacks_data, f)
