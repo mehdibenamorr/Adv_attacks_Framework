@@ -72,7 +72,7 @@ def one_pixel(img, label, net, model,target=None, pixels=1, maxiter=75, popsize=
     targeted_attack = target is not None
     target_class = target if targeted_attack else label
 
-    bounds = [(0 ,28), (0 ,28), (0 ,255) ] * pixels
+    bounds = [(0 ,27), (0 ,27), (0 ,255) ] * pixels
 
     popmul = int(max(1 , popsize/len(bounds)))
 

@@ -107,8 +107,8 @@ class FGSM(Attack):
 
             if y_pred != y_pred_adversarial:
                 Adv_misclassification += 1
-                if self.args.V :
-                    vis_adv_org(x,x_adversarial,y_pred,y_pred_adversarial)
+
+                vis_adv_org(x,x_adversarial,y_pred,y_pred_adversarial)
                 y_preds.append(y_pred)
                 y_preds_adversarial.append(y_pred_adversarial)
                 noises.append((x_adversarial.data - x.data).cpu().numpy())
@@ -314,6 +314,7 @@ class One_Pixel(Attack):
                     xs_clean.append(img_var.data.cpu().numpy())
                     y_trues_clean.append(y_true)
                     adversarial_confidences.append(adversarial_confidence)
+                    vis_adv_org(x, adv_img, y_pred, y_pred_adversarial)
                     # 3. Log adversarial images (image summary)
                     info = {'Adv_image': adv_img.view(-1,28,28).cpu().numpy()}
 

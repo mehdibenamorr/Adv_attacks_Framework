@@ -36,16 +36,47 @@ def generate_samples(model):
 
 
 def vis_adv_org(x_org, x_adv,y_pred,y_adv,target=None):
+    style = {"figure.figsize": (5, 3.75),
+             "figure.titlesize": 11,
+             "legend.frameon": False,
+             "legend.loc": 'upper right',
+             "legend.fontsize": 11,
+             "axes.labelsize": 11,
+             "axes.titlesize": 11,
+             "savefig.bbox": 'tight',
+             "savefig.pad_inches": 0.05,
+             "savefig.dpi": 300,
+             "xtick.direction": 'in',
+             "xtick.labelsize": 11,
+             "xtick.major.size": 4,
+             "xtick.major.width": 2,
+             "xtick.minor.size": 2,
+             "xtick.minor.width": 1,
+             "xtick.minor.visible": True,
+             "xtick.top": False,
+             "xtick.bottom": True,
+             "ytick.direction": 'in',
+             "ytick.labelsize": 11,
+             "ytick.major.size": 4,
+             "ytick.major.width": 2,
+             "ytick.minor.size": 2,
+             "ytick.minor.width": 1,
+             "ytick.minor.visible": True,
+             "ytick.right": False,
+             "ytick.left": True
+             }
+    plots_path = 'plots/'
+    x_adv = x_adv.cpu().reshape(1,28,28)
     noise = (x_adv - x_org).data.numpy().reshape(28,28)
     x_org = x_org.data.numpy().reshape(28,28)
     x_adv = x_adv.data.numpy().reshape(28,28)
-    disp_im = np.concatenate((x_org, x_adv,noise),axis=1)
+    disp_im = np.concatenate((x_org,x_adv),axis=1)
     if target:
         plt.title("Original : {}    Target/Adv : {}/{}    Perturbation : {:.5f}".format(y_pred,target,y_adv,noise.mean()))
     else:
-        plt.title("Original : {}    Adversarial : {}    Perturbation : {:.5f}".format(y_pred,y_adv,noise.mean()))
+        plt.title("Original: {}      Adversarial : {}".format(y_pred,y_adv))
     plt.imshow(disp_im,cmap='gray')
-    plt.show()
+    plt.savefig(plots_path + 'onepixel_example.pdf')
 
 
 def generate_random_dag(N, k, p, dense=-1):

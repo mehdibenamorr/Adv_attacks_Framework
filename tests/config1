@@ -4,7 +4,7 @@ nodes = 200
 k = 3
 p = 0.7
 layers = -1
-saved_models = tests/results/SNN_experiment/Trained_SNNs.pkl
+saved_models = tests/results/Trained_FFNs.pkl
 
 
 [Model training Parameters]
@@ -40,4 +40,4 @@ popsize = 500
 samples = 100
 targeted = False
 
-V = False #visulaize adversarial examples
+V = True #visulaize adversarial examples
