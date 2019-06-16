@@ -1,14 +1,15 @@
-from attacks.attack_methods import *
+from attacks import *
 import configargparse
 import torch
 import torch.backends.cudnn as cudnn
-from models.models import models
+from models import *
 from utils.common import generate_SNNs
 import torch.nn.init as init
 import os
 import pandas as pd
 import numpy as np
 from utils.logger import Logger
+import pickle
 
 
 parser = configargparse.ArgumentParser()

@@ -1,4 +1,4 @@
-from attacks.attack_methods import *
+from attacks import *
 import configargparse
 import torch
 

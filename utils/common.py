@@ -1,13 +1,9 @@
 import torch
 from torchvision import datasets, transforms
-import os
-import pickle
 import matplotlib.pyplot as plt
 import numpy as np
 from igraph import *
-import torch.nn as nn
-# from models.models import SNN  #TODO fix this import issue
-import models.models
+
 
 def flat_trans(x):
     x.resize_(28*28)
@@ -162,7 +158,7 @@ def layer_indexing(g):
 
 
 def generate_SNNs(params_range, args, kwargs, nb=10, nodes=None, ks=None, ps=None):
-    from models.models import SNN
+    from models import SNN
     print("==> Generating SNNs with #paramerters in " + str(params_range))
     nb_SNNs = 0
     graph_structures = []

@@ -1,6 +1,6 @@
 import configargparse
 import torch
-from models.models import models
+from models import models
 import os
 import torch.backends.cudnn as cudnn
 import sys

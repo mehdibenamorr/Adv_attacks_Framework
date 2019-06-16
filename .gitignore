@@ -20,3 +20,11 @@ tests/results/*
 *.html
 *.jpg
 gen_graph.py
+graphics.py
+Initializers_stability.py
+performances_data.py
+
+
+
+
+
