@@ -6,7 +6,7 @@ logs/
 data/*
 plots/*
 .utils/adv_examples/*
-tests/results/*
+.tests/results/*
 
 
 # unnecessary files
